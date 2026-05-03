@@ -1,0 +1,671 @@
+╭─── Claude Code v2.1.126 ─────────────────────────────────────────────────────╮
+│                                                    │ Tips for getting        │
+│               Welcome back Muhammed!               │ started                 │
+│                                                    │ Run /init to create a … │
+│                       ▐▛███▜▌                      │ ─────────────────────── │
+│                      ▝▜█████▛▘                     │ What's new              │
+│                        ▘▘ ▝▝                       │ The `/model` picker no… │
+│      Opus 4.7 · Claude Pro ·                       │ - Added `claude projec… │
+│      mr.muhammed.pasa@gmail.com's Organization     │ `--dangerously-skip-pe… │
+│     ~\OneDrive\Documents\Projects\PL\PL_Project    │ /release-notes for more │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+❯ Yo whatsup                                                                    
+
+● Hey! What are we working on today — more FitLang progress, or something else?
+
+✻ Baked for 2s
+
+❯ We will continue with our FitLang                                             
+
+  Recalled 1 memory (ctrl+o to expand)
+
+● Bash(git log --oneline -20)
+  ⎿  721ef5d Added Claude Code session
+     dbd15d5 Add course materials, AI journal, and FitLang D1 §4.1
+     3e48019 Initial commit
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● Got the lay of the land. D1 §4.1 is done; the remaining P1 sections (due Fri 8
+   May) are §4.2 Lexical Structure, §4.3 Syntax (EBNF), and §4.6
+  Names/Binding/Scope/Lifetime — plus D2 (lexer + parser in Java), D3 sample
+  programs, D4 journal entries (incl. E1), D5 retro.
+
+  Where do you want to pick up? My instinct is §4.2 lexical structure next —
+  token classes, reserved words, the unit-literal lexeme (80 kg, 2.5 kg/week),
+  comments, identifier rules — because §4.3's EBNF needs those terminals nailed
+  down first. Want to go there, or jump somewhere else?
+
+✻ Cogitated for 16s
+
+❯ yeah let's do the lexical structure                                           
+
+● Before I draft §4.2, there are a few lexical-level design calls that
+  materially shape the rest of the spec. I'd rather get your steer than pick
+  silently.
+
+  1. Open vs closed lexicon. Looking at the §4.1 sample, every unquoted token is
+   either a reserved word (athlete, workout, weight, bulk), a unit (kg, g), or
+  punctuation — every user-supplied name ("Push Day", "Bench Press") is a string
+   literal. FitLang has no let / var and no user-named variables. I'd lean into
+  that: closed lexicon, every unquoted lexeme reserved. It's defensible (cite
+  Pascal's reserved-word philosophy, Sebesta §3) and makes the lexer trivially
+  regular. Alternative: open lexicon with general identifiers, in case you want
+  let restDay = ... later. Which?
+
+  2. Unit suffixes — one token or two? 80 kg could be:
+  - (A) a single QUANTITY_LIT lexeme via maximal-munch (Frink-style; units truly
+   first-class, but lexer needs context for kg/week)
+  - (B) two tokens NUM_LIT + UNIT paired at parse time (simpler regular lexer;
+  closer to how C++ user-defined literals work pre-parse)
+
+  I'd pick B — keeps the lexer regular, and rate forms (kg/week, g per kg)
+  compose naturally in the grammar. But A is more "units are part of the
+  lexicon."
+
+  3. Comments. # to-end-of-line (config-file feel, matches the DSL's vibe) or //
+   + /* */ (Java-family, since the interpreter is Java)? I'd go # only.
+
+  4. Case sensitivity & charset. Case-sensitive identifiers/keywords (modern
+  default, Sebesta §3 calls Fortran's case-insensitivity an outlier). UTF-8
+  source; identifiers ASCII; string literals allow Unicode so meal names like
+  "Kahvaltı" work.
+
+  5. Numeric literals. Integers and floats only (80, 2.5, 0.5) — no
+  hex/octal/exponent (zero domain need). Negatives via unary -, not part of the
+  literal.
+
+  Tell me yes/no on each (or just "all your defaults") and I'll write §4.2.
+
+✻ Brewed for 54s
+
+❯ 2. yeah let's use B like in C and other languages. 3. # at the beggining is   
+  fine 4. case sensitive and allow unicode 5. yeah there is no sense for other  
+  numeric values other than ints/float, we may add exponent but what would it   
+  for idk. 1. I need more details before deciding                               
+
+● Good call holding on #1 — it's the one with downstream consequences. Let me
+  lay it out concretely.
+
+  What "closed lexicon" means in practice
+
+  Every token the lexer can produce falls into one of these classes, and the 
+  user cannot introduce a new word that the scanner doesn't already know:
+
+  Class: Reserved words
+  Examples: athlete, workout, exercise, meal, progress, target, goal, plan,
+  week,
+    with, sets, reps, weight, bodyweight, protein, carbs, fat, per, of
+  Source: fixed in the language
+  ────────────────────────────────────────
+  Class: Mode literals
+  Examples: bulk, cut, maintain, lose, gain
+  Source: fixed (enum-like)
+  ────────────────────────────────────────
+  Class: Units
+  Examples: kg, lb, g, kcal, kJ, s, min, h, day, week
+  Source: fixed
+  ────────────────────────────────────────
+  Class: Numeric literals
+  Examples: 80, 2.5
+  Source: user-supplied values
+  ────────────────────────────────────────
+  Class: String literals
+  Examples: "Push Day", "Bench Press", "Breakfast"
+  Source: the only way the user introduces names
+  ────────────────────────────────────────
+  Class: Punctuation
+  Examples: { } [ ] ( ) , : / >= <= > < =
+  Source: fixed
+
+  So when the user writes workout "Push Day" { ... }, the name "Push Day" is
+  data — a string key in a workout registry. The grammar is closed; the data is
+  open. Same idea as SQL (every unquoted token is a keyword; table/column names
+  are unquoted identifiers, but that's because SQL has identifiers — strip those
+   and you get FitLang) or JSON (closed grammar, all user names are quoted
+  strings).
+
+  What "open lexicon" would buy you
+
+  Adding general identifiers means lines like:
+  let pushDay = workout { ... }
+  let dailyKcal = 2800 kcal
+  plan week with workouts: [pushDay]
+
+  You'd get named bindings — reuse a workout in multiple weeks, parameterize a
+  meal by a calorie target, etc. That's a genuine feature, not just a syntactic
+  preference. It also gives §4.6 (Names, Binding, Scope, Lifetime) much more to
+  talk about — with a closed lexicon, §4.6 becomes "FitLang has no
+  user-introduced names; the binding story is entirely about reserved-word-keyed
+   slots in lexically nested blocks," which is a defensible but thin §4.6.
+
+  The trade-off
+
+  Column 1: Lexer
+  Closed lexicon: Trivially regular, no symbol table at scan
+  Open lexicon (let-bindings): Same (still regular)
+  ────────────────────────────────────────
+  Column 1: Parser
+  Closed lexicon: Simpler — every keyword is a literal terminal
+  Open lexicon (let-bindings): Slightly more — IDENT token, ambiguity between
+    IDENT and reserved word
+  ────────────────────────────────────────
+  Column 1: §4.6 content
+  Closed lexicon: Thin — only string-keyed registries (workout/meal name →
+  block)
+  Open lexicon (let-bindings): Rich — scope rules, shadowing, lifetime of let
+    bindings
+  ────────────────────────────────────────
+  Column 1: §4.5 type system
+  Closed lexicon: Simpler — every block schema is fixed
+  Open lexicon (let-bindings): Type-checking variable references, possibly
+    let-polymorphism
+  ────────────────────────────────────────
+  Column 1: Originality / DSL identity
+  Closed lexicon: Stronger — feels like a configuration language for training,
+    not a scripting language
+  Open lexicon (let-bindings): Weaker — drifts toward "yet another scripting DSL
+
+    with units"
+  ────────────────────────────────────────
+  Column 1: Expressive power
+  Closed lexicon: Can't reuse a workout under two weeks without copy-paste,
+  can't
+    extract a magic number
+  Open lexicon (let-bindings): Can name and reuse anything
+  ────────────────────────────────────────
+  Column 1: Sebesta defense
+  Closed lexicon: Cite Pascal's reserved-word strictness (§3) and SQL/JSON
+  closed
+    grammars; simplicity & orthogonality (§1.3.1)
+  Open lexicon (let-bindings): Cite Algol/Pascal/Java; richer abstraction
+  (§1.3.2
+     writability via abstraction)
+
+  My recommendation
+
+  Closed lexicon for D1, with one explicit escape hatch: numeric let-bindings 
+  only.
+
+  That is — the user can write let bodyweightTarget = 80 kg and refer to it
+  later, but cannot bind workouts/meals to identifiers. Reasons:
+
+  - §4.6 still has real content (numeric let-bindings, lexical scope,
+  immutability — let not var, since you said "no globals" in your design
+  constraints).
+  - Workouts/meals stay first-class blocks keyed by string names — DSL identity
+  preserved.
+  - The grading rubric for "Use of Sebesta Framework" rewards named trade-offs;
+  this lets you write a clean §4.8 paragraph: "we admit user identifiers only at
+   the leaf-value level because giving block-typed values names would push
+  FitLang from a configuration DSL toward a scripting language."
+  - Workload-wise: tiny additional lexer/parser work, and a much stronger §4.5
+  type-system story (you get to talk about typing variable references against
+  the unit system).
+
+  Three shapes to choose from:
+
+  - (i) Fully closed — no identifiers anywhere. Cleanest DSL identity, thinnest
+  §4.6.
+  - (ii) Closed + numeric let (my pick) — one identifier class, leaf-only.
+  - (iii) Fully open — identifiers can name any value including blocks. Most
+  expressive, weakest DSL identity.
+
+  Which shape?
+
+✻ Cogitated for 31s
+
+❯ if we chose ii today can we expand the language to iii later?                 
+
+● Yes — (ii) → (iii) is a strictly additive extension, not a breaking one.
+  Concretely:
+
+  Lexer. Identical. (ii) already needs an IDENT token class with the regex
+  [a-zA-Z_][a-zA-Z0-9_]* minus reserved words. (iii) uses the same token;
+  nothing changes at the scanner level.
+
+  Grammar. (ii) restricts where IDENT can appear — only on the LHS of let, on
+  the RHS of leaf-value positions (where a QUANTITY_LIT or NUM_LIT is expected).
+   (iii) loosens that to any value position, including block-typed positions
+  like workouts: [pushDay]. That's a relaxation of a production, not a
+  redefinition — every (ii) program is still a valid (iii) program.
+
+  Type system. (ii) only has to type-check identifier references against
+  scalar/quantity types. (iii) extends the type system to block-typed values
+  (workout-typed, meal-typed). The type rules for scalars don't change; you're
+  adding new ones. Again additive.
+
+  Semantics. (ii)'s let x = 80 kg is sugar for substituting a value. (iii) has
+  to decide whether let push = workout {...} is a value binding (the workout
+  block is a first-class value, structurally) or a reference. That decision is
+  the only real design call you'd defer — but you don't have to make it now to
+  keep (iii) reachable; you only have to make it when you actually do (iii).
+
+  The one thing that would lock you out of (iii): if in (ii) you make IDENT
+  legal only in let-RHS scalar positions and you parse it via a separate
+  non-terminal (scalar_expr) that's disjoint from value_expr, you'd later need
+  to merge them. That's a 10-line grammar refactor, not a redesign. To make it
+  even cheaper: define one value_expr non-terminal in §4.3 now, and in §4.5
+  type-restrict identifier references to scalars. Then (iii) is purely a
+  type-system relaxation in the Part 2 spec — zero grammar change.
+
+  Sebesta angle for §4.8. This is exactly the kind of staged evolution the book
+  treats well: cite §1.4 (language design influences) on how Algol-family
+  languages added first-class procedures after first-class values were already
+  in the grammar, rather than re-architecting. You can defend (ii) for D1 as
+  "the minimum identifier surface needed to make §4.6 substantive," and flag
+  (iii) in §4.8's rationale paragraph as a future relaxation.
+
+  So: pick (ii) today with the grammar shaped to make (iii) a type-system-only
+  change later. Want me to go with that?
+
+✻ Worked for 18s
+
+❯ yeah let's go with ii, and if I find that our language is too strict we may   
+  go with iii. Btw whats todays' date                                           
+
+● Today is 2026-05-03 (Sunday) — 5 days to the Part 1 deadline (Fri 8 May
+  23:59).
+
+  Going with (ii). Drafting §4.2 now.
+
+● Update(docs\design\D1.md)
+  ⎿  Added 76 lines, removed 2 lines
+       41  
+       42  ---
+       43  
+       44 -## 4.2 Lexical Structure **[P1]** — *(in progress)*           
+       44 +## 4.2 Lexical Structure **[P1]**                             
+       45  
+       46 -*To be filled in next.*                                       
+       46 +### 4.2.1 Character set, line endings, whitespace             
+       47  
+       48 +FitLang source is UTF-8. The lexer treats the source as a stre
+          +am of Unicode code points, but the only places non-ASCII code 
+          +points may appear are inside string literals and inside line c
+          +omments — every other lexeme is ASCII. Whitespace (`U+0020` sp
+          +ace, `U+0009` tab, `U+000A` LF, `U+000D` CR) is insignificant:
+          + it separates tokens but carries no other meaning. Indentation
+          + is not part of the grammar; we explicitly reject Python-style
+          + significant indentation (Sebesta §3.1) because the block synt
+          +ax already uses `{ }` and double-duty would only cost readabil
+          +ity.                                                          
+       49 +                                                              
+       50 +### 4.2.2 Comments                                            
+       51 +                                                              
+       52 +A `#` outside a string literal starts a line comment that runs
+          + to the next newline. There is no block-comment form. One comm
+          +ent style keeps the lexer's comment automaton trivial and matc
+          +hes the configuration-language feel of the surface syntax.    
+       53 +                                                              
+       54 +```fitlang                                                    
+       55 +# Cutting block, week 3                                       
+       56 +workout "Push Day" { ... }                                    
+       57 +```                                                           
+       58 +                                                              
+       59 +### 4.2.3 Token classes                                       
+       60 +                                                              
+       61 +Every lexeme produced by the scanner falls into exactly one of
+          + the classes below. Class names in **bold** are the terminal s
+          +ymbols used by §4.3's EBNF.                                   
+       62 +                                                              
+       63 +| Class | Regex (POSIX-extended) | Examples |                 
+       64 +|---|---|---|                                                 
+       65 +| **RESERVED** | one of the listed reserved words (table 4.2.5
+          +) | `athlete`, `workout`, `let` |                             
+       66 +| **MODE_LIT** | one of the listed mode literals (table 4.2.5)
+          + | `bulk`, `cut`, `lose` |                                    
+       67 +| **UNIT** | one of the listed unit lexemes (table 4.2.6) | `k
+          +g`, `kcal`, `week` |                                          
+       68 +| **NUM_LIT** | `[0-9]+ (\.[0-9]+)?` | `80`, `2.5`, `0.5` |   
+       69 +| **STRING_LIT** | `"` *( any Unicode except `"` and newline; 
+          +`\\` and `\"` escapes )* `"` | `"Push Day"`, `"Kahvaltı"` |   
+       70 +| **IDENT** | `[A-Za-z_][A-Za-z0-9_]*` minus any RESERVED / MO
+          +DE_LIT / UNIT lexeme | `bodyweightTarget`, `dailyKcal` |      
+       71 +| **PUNCT** | one of `{ } [ ] ( ) , : / >= <= > < =` | `{`, `>
+          +=`, `:` |                                                     
+       72 +                                                              
+       73 +Numeric literals carry no sign — leading `-` is the unary minu
+          +s operator, lexed as the `-` punctuation token. Exponent form 
+          +(`1.5e3`) is rejected; the domain has no quantity that benefit
+          +s from it. There is no integer / float distinction at the lexi
+          +cal level — both `80` and `80.0` produce a single **NUM_LIT** 
+          +token whose attribute is the numeric value; the type system (§
+          +4.5) decides where each is admissible.                        
+       74 +                                                              
+       75 +### 4.2.4 String literals                                     
+       76 +                                                              
+       77 +A string literal is delimited by ASCII double quotes. Inside t
+          +he literal any Unicode code point is permitted except an unesc
+          +aped `"` or newline (literal newlines are rejected to keep err
+          +or recovery line-local). Two escape sequences are recognized: 
+          +`\"` for a literal quote and `\\` for a literal backslash. No 
+          +`\n`, `\t`, octal, or `\u` escapes — the only role of strings 
+          +in FitLang is to label workouts, exercises, and meals, and emb
+          +edded control characters would never improve readability of th
+          +ose labels.                                                   
+       78 +                                                              
+       79 +### 4.2.5 Reserved words and mode literals                    
+       80 +                                                              
+       81 +FitLang uses a **closed lexicon**: every unquoted alphabetic l
+          +exeme is either a reserved word, a mode literal, or a unit. Th
+          +e user introduces names only via string literals (workout / ex
+          +ercise / meal labels) or via numeric `let` bindings (one **IDE
+          +NT** class, restricted by §4.5 to scalar and quantity types). 
+          +This is the "fully reserved" stance Sebesta credits to Pascal 
+          +in §3.1 — a reserved word can never be redeclared as an identi
+          +fier, eliminating the keyword-vs-identifier ambiguity ALGOL 60
+          + left to context.                                             
+       82 +                                                              
+       83 +Reserved words (case-sensitive):                              
+       84 +                                                              
+       85 +```                                                           
+       86 +athlete  workout  exercise  meal  progress  target  goal  plan
+          +  week                                                        
+       87 +with     workouts meals     let   bodyweight                  
+       88 +sets     reps     weight    protein  carbs   fat              
+       89 +per      of       and                                         
+       90 +```                                                           
+       91 +                                                              
+       92 +Mode literals (case-sensitive — finite enumerations consumed p
+          +ositionally in §4.3):                                         
+       93 +                                                              
+       94 +```                                                           
+       95 +bulk  cut  maintain         # goal modes                      
+       96 +lose  gain                   # weight-change directions       
+       97 +```                                                           
+       98 +                                                              
+       99 +Mode literals are syntactically distinct from reserved words b
+          +ecause §4.3 admits them only in fixed positions (`goal: <mode>
+          +`, `<direction> <quantity>`); flagging them with their own tok
+          +en class catches misuse at parse time rather than via a semant
+          +ic check.                                                     
+      100 +                                                              
+      101 +### 4.2.6 Units                                               
+      102 +                                                              
+      103 +Units are recognized as their own token class so that the pars
+          +er can require a **NUM_LIT** **UNIT** pair anywhere a quantity
+          + is expected (per the §1 design call: lex two tokens, pair at 
+          +parse time). Each unit lexeme carries an attribute identifying
+          + its dimension family — Mass, Energy, Macro, Time — used by §4
+          +.5's coercion rules.                                          
+      104 +                                                              
+      105 +| Family | Lexemes |                                          
+      106 +|---|---|                                                     
+      107 +| Mass | `kg`, `lb` |                                         
+      108 +| Energy | `kcal`, `kJ` |                                     
+      109 +| Macro | `g` |                                               
+      110 +| Time | `s`, `min`, `h`, `day`, `week` |                     
+      111 +                                                              
+      112 +`g` is deliberately overloaded as a Macro unit only (protein/c
+          +arbs/fat), not a Mass unit; bodyweight is in `kg` or `lb`. Dis
+          +joint families simplify the type rule — no scanner ambiguity, 
+          +and §4.5's "type error across families" rule has no edge cases
+          +. `week` is both a reserved word (in `plan week`) and a unit (
+          +in `2.5 kg/week`); the scanner emits the same lexeme and §4.3 
+          +distinguishes by position. Compound rate forms like `kg/week` 
+          +are *not* a single lexeme — the scanner emits three tokens (`N
+          +UM_LIT` `UNIT` `/` `UNIT`) and the parser builds the rate.    
+      113 +                                                              
+      114 +### 4.2.7 Punctuation                                         
+      115 +                                                              
+      116 +The complete punctuation alphabet is `{`, `}`, `[`, `]`, `(`, 
+          +`)`, `,`, `:`, `/`, `=`, `>`, `<`, `>=`, `<=`. Maximal-munch (
+          +Sebesta §4.2 longest-match rule) resolves `>=` and `<=` agains
+          +t `>` `=` and `<` `=`. There is no `==` — equality on quantiti
+          +es is not a surface-language operation in FitLang (`target` an
+          +d `goal` use `>=` / `<=` against thresholds; we never test two
+          + quantities for exact equality). There is no `;` — newlines an
+          +d `,` carry list and statement separation.                    
+      117 +                                                              
+      118 +### 4.2.8 Identifiers                                         
+      119 +                                                              
+      120 +**IDENT** is `[A-Za-z_][A-Za-z0-9_]*` minus the closed lexicon
+          + of §4.2.5–4.2.6. ASCII only — Unicode identifiers add a norma
+          +lization burden (NFC vs NFD homoglyphs) Sebesta calls out in §
+          +3.1, and the DSL has no payoff. Case-sensitive: `bodyweight` (
+          +the reserved word) and `Bodyweight` (a legal **IDENT**) are di
+          +stinct lexemes; we follow the C/Java convention and reject For
+          +tran-style case folding (Sebesta §3.1 lists case-insensitivity
+          + as a historical outlier). The scanner enforces the "minus res
+          +erved" rule by checking each candidate identifier against the 
+          +reserved/mode/unit tables before emitting **IDENT**, so the pa
+          +rser never has to disambiguate.                               
+      121 +                                                              
+      122  ---
+      123  
+      124  ## 4.3 Syntax (EBNF) **[P1]** — *(in progress)*
+
+● §4.2 drafted. Eight subsections covering charset/whitespace, comments, the
+  seven token classes with regex, string literals, the closed-lexicon
+  reserved/mode-literal tables, units (with family attributes), punctuation, and
+   identifiers. Sebesta cites tied to §1.3.1, §3.1, §4.2.
+
+  A few calls I made that you should sanity-check before we move to §4.3:
+
+  - Reserved word list — I included let, and, per, of in addition to the
+  structural words from your §4.1 sample. and is in there speculatively for
+  compound predicates in §4.5 (target protein >= 1.8 g/kg and kcal >= 2500);
+  drop if you don't want it.
+  - week is both a reserved word and a unit. Same lexeme, distinguished by parse
+   position. I documented this explicitly. Alternative: rename the planning
+  keyword to plan weekly to avoid the overload — your call.
+  - g is Macro-only, not Mass. So bodyweight cannot be written 78000 g. Aligns
+  with your "type error across families" rule cleanly. Push back if you want
+  grams to be Mass too.
+  - No == and no ;. Let me know if either should come back.
+  - String escapes: only \" and \\. No \n/\t/\u.
+  - Identifiers ASCII-only even though strings allow Unicode.
+
+  Want me to adjust any of those, or move on to §4.3 (EBNF)?
+
+✻ Cogitated for 1m 1s
+
+※ recap: We're drafting FitLang's D1 spec for CSE 341 Part 1 (due Fri 8 May); §4.1 and §4.2 (lexical structure) are done. Next: confirm the §4.2 design calls I flagged, then draft §4.3 EBNF. (disable recaps in /config)
+
+❯ reserved word list is fine, but the g thing is unnecessary strictness, like   
+  why can't I represent my weight by 70000 g right? Is it the time where we     
+  talk about operators? I think == is good or ===, escapes \" and \n            
+
+● All three reasonable. Two quick clarifications before I edit:
+
+  On g. The cleanest fix is to collapse Macro into Mass. Protein in grams is a
+  mass — there was no real reason to split them beyond catching protein: 80 kg
+  (silly but harmless). Mass family becomes { g, kg, lb }, and field-level
+  constraints in §4.5 can still flag "protein in tonnes" if we want. This gives
+  you a three-family type system (Mass / Energy / Time) instead of four —
+  cleaner Sebesta story too.
+
+  On == vs ===. === only earns its keep when you have value-vs-reference
+  equality (JS, PHP). FitLang has no reference types — quantities are values,
+  blocks are accessed by string keys. So == is the right call; === would be
+  ceremony. I'll also add != for symmetry. Operator semantics (associativity,
+  precedence, whether it's a statement or expression) belong in §4.7 (Part 2) —
+  for §4.2 I just register the lexemes.
+
+  Applying now.
+
+● Update(docs\design\D1.md)
+  ⎿  Added 1 line, removed 1 line
+      74  
+      75  ### 4.2.4 String literals
+      76  
+      77 -A string literal is delimited by ASCII double quotes. Inside th
+         -e literal any Unicode code point is permitted except an unescap
+         -ed `"` or newline (literal newlines are rejected to keep error 
+         -recovery line-local). Two escape sequences are recognized: `\"`
+         - for a literal quote and `\\` for a literal backslash. No `\n`,
+         - `\t`, octal, or `\u` escapes — the only role of strings in Fit
+         -Lang is to label workouts, exercises, and meals, and embedded c
+         -ontrol characters would never improve readability of those labe
+         -ls.                                                            
+      77 +A string literal is delimited by ASCII double quotes. Inside th
+         +e literal any Unicode code point is permitted except an unescap
+         +ed `"` or raw newline (literal newlines in source are rejected 
+         +to keep error recovery line-local). Three escape sequences are 
+         +recognized: `\"` (literal quote), `\\` (literal backslash), and
+         + `\n` (line feed). Octal, hex, and `\u` escapes are not support
+         +ed — labels only need a way to embed quotes, backslashes, and t
+         +he occasional line break.                                      
+      78  
+      79  ### 4.2.5 Reserved words and mode literals
+      80  
+
+● Update(docs\design\D1.md)
+  ⎿  Added 3 lines, removed 4 lines
+      100  
+      101  ### 4.2.6 Units
+      102  
+      103 -Units are recognized as their own token class so that the pars
+          -er can require a **NUM_LIT** **UNIT** pair anywhere a quantity
+          - is expected (per the §1 design call: lex two tokens, pair at 
+          -parse time). Each unit lexeme carries an attribute identifying
+          - its dimension family — Mass, Energy, Macro, Time — used by §4
+          -.5's coercion rules.                                          
+      103 +Units are recognized as their own token class so that the pars
+          +er can require a **NUM_LIT** **UNIT** pair anywhere a quantity
+          + is expected (per the §1 design call: lex two tokens, pair at 
+          +parse time). Each unit lexeme carries an attribute identifying
+          + its dimension family — Mass, Energy, Time — used by §4.5's co
+          +ercion rules.                                                 
+      104  
+      105  | Family | Lexemes |
+      106  |---|---|
+      107 -| Mass | `kg`, `lb` |                                         
+      107 +| Mass | `g`, `kg`, `lb` |                                    
+      108  | Energy | `kcal`, `kJ` |
+      109 -| Macro | `g` |                                               
+      109  | Time | `s`, `min`, `h`, `day`, `week` |
+      110  
+      112 -`g` is deliberately overloaded as a Macro unit only (protein/c
+          -arbs/fat), not a Mass unit; bodyweight is in `kg` or `lb`. Dis
+          -joint families simplify the type rule — no scanner ambiguity, 
+          -and §4.5's "type error across families" rule has no edge cases
+          -. `week` is both a reserved word (in `plan week`) and a unit (
+          -in `2.5 kg/week`); the scanner emits the same lexeme and §4.3 
+          -distinguishes by position. Compound rate forms like `kg/week` 
+          -are *not* a single lexeme — the scanner emits three tokens (`N
+          -UM_LIT` `UNIT` `/` `UNIT`) and the parser builds the rate.    
+      111 +Macronutrients (protein, carbs, fat) are themselves masses — `
+          +protein: 80 g` and `bodyweight: 78 kg` carry quantities of the
+          + same family, and within-family coercion (§4.5) means `bodywei
+          +ght: 70000 g` is legal and equal to `bodyweight: 70 kg`. Three
+          + families instead of four keeps the type rule simple and lets 
+          +the cross-family error rule (`80 kg + 200 kcal` is a static ty
+          +pe error) carry its weight without artificial splits. `week` i
+          +s both a reserved word (in `plan week`) and a unit (in `2.5 kg
+          +/week`); the scanner emits the same lexeme and §4.3 distinguis
+          +hes by position. Compound rate forms like `kg/week` are *not* 
+          +a single lexeme — the scanner emits three tokens (`NUM_LIT` `U
+          +NIT` `/` `UNIT`) and the parser builds the rate.              
+      112  
+      113  ### 4.2.7 Punctuation
+      114  
+
+● Update(docs\design\D1.md)  ⎿  Added 1 line, removed 1 line
+      112  
+      113  ### 4.2.7 Punctuation
+      114  
+      115 -The complete punctuation alphabet is `{`, `}`, `[`, `]`, `(`, 
+          -`)`, `,`, `:`, `/`, `=`, `>`, `<`, `>=`, `<=`. Maximal-munch (
+          -Sebesta §4.2 longest-match rule) resolves `>=` and `<=` agains
+          -t `>` `=` and `<` `=`. There is no `==` — equality on quantiti
+          -es is not a surface-language operation in FitLang (`target` an
+          -d `goal` use `>=` / `<=` against thresholds; we never test two
+          - quantities for exact equality). There is no `;` — newlines an
+          -d `,` carry list and statement separation.                    
+      115 +The complete punctuation alphabet is `{`, `}`, `[`, `]`, `(`, 
+          +`)`, `,`, `:`, `/`, `=`, `>`, `<`, `>=`, `<=`, `==`, `!=`, `+`
+          +, `-`, `*`. Maximal-munch (Sebesta §4.2 longest-match rule) di
+          +sambiguates `>=`/`<=`/`==`/`!=` against their single-character
+          + prefixes; the scanner reads as many characters as form a vali
+          +d punctuation lexeme before emitting a token. Equality (`==`) 
+          +and inequality (`!=`) are reserved here at the lexical level; 
+          +their semantics — operand types, whether they compare quantiti
+          +es by canonicalized value or by surface unit — are specified i
+          +n §4.7 (Part 2). There is no `===`: FitLang has no reference-t
+          +yped values, so the JavaScript-style value-vs-identity distinc
+          +tion would be ceremony with no payoff. There is no `;` — newli
+          +nes and `,` carry list and statement separation.              
+      116  
+      117  ### 4.2.8 Identifiers
+      118  
+
+● Update(docs\design\D1.md)
+  ⎿  Added 1 line, removed 1 line
+      68  | **NUM_LIT** | `[0-9]+ (\.[0-9]+)?` | `80`, `2.5`, `0.5` |
+      69  | **STRING_LIT** | `"` *( any Unicode except `"` and newline; `
+          \\` and `\"` escapes )* `"` | `"Push Day"`, `"Kahvaltı"` |
+      70  | **IDENT** | `[A-Za-z_][A-Za-z0-9_]*` minus any RESERVED / MOD
+          E_LIT / UNIT lexeme | `bodyweightTarget`, `dailyKcal` |
+      71 -| **PUNCT** | one of `{ } [ ] ( ) , : / >= <= > < =` | `{`, `>=
+         -`, `:` |                                                       
+      71 +| **PUNCT** | one of `{ } [ ] ( ) , : / + - * = > < >= <= == !=
+         +` | `{`, `>=`, `:` |                                           
+      72  
+      73  Numeric literals carry no sign — leading `-` is the unary minus
+           operator, lexed as the `-` punctuation token. Exponent form (`
+          1.5e3`) is rejected; the domain has no quantity that benefits f
+          rom it. There is no integer / float distinction at the lexical 
+          level — both `80` and `80.0` produce a single **NUM_LIT** token
+           whose attribute is the numeric value; the type system (§4.5) d
+          ecides where each is admissible.
+      74  
+
+● Done. Three changes applied:
+
+  1. Macro family collapsed into Mass. g, kg, lb are all Mass now; bodyweight: 
+  70000 g is legal and equal to 70 kg via within-family coercion (§4.5).
+  2. == and != added to the punctuation alphabet, with a note that semantics
+  belong to §4.7. Rejected ===.
+  3. \n added to string escapes (now \", \\, \n).
+
+  I also quietly added +, -, * to the punctuation alphabet — your §4.1 already
+  references 80 kg + 1 m as a type-error example, so the arithmetic operators
+  need lexical existence even if §4.7 specifies their semantics later. Flag if
+  you'd rather drop them for now.
+
+  Ready for §4.3 (EBNF) when you are. Want me to also start a journal entry for
+  this session before we move on?
+
+✻ Baked for 1m 25s
+
+❯ We will stop for today, prepare a commit and push. do not put claude in your  
+  commit message                                                                
+
+● Bash(git status; git diff --stat)
+  ⎿  On branch main
+     Your branch is up to date with 'origin/main'.
+     … +12 lines (ctrl+o to expand)
+
+● Bash(git add docs/design/D1.md && git commit -m "Add FitLang D1 §4.2 lexical
+      structure…)
+  ⎿  Interrupted · What should Claude do instead?
+
+❯ prepare a ai entry first                                                      
+
+  Read 2 files (ctrl+o to expand)
+
+● Write(docs\ai-journal\entries\03_2026-05-03_lexical-structure.md)
+  ⎿  Wrote 47 lines to
+     docs\ai-journal\entries\03_2026-05-03_lexical-structure.md
+       1 ---
+       2 entry: 03
+       3 date: 03-05-2026
+       4 phase: Design
+       5 ai_tool: Claude Opus 4.7 (claude-opus-4-7) via Claude Code CLI
+       6 ---
+       7 
+       8 # Entry 03 — D1 §4.2 Lexical Structure
+       9 
+      10 ## Goal
+     … +115 lines (ctrl+o to expand)
+
+● Journal entry 03 written. Ready to commit and push — both docs/design/D1.md
+  (§4.2) and the new entry. Same commit message as before (no Claude
+  attribution), or want me to split into two commits?
+
+✻ Baked for 59s
+
+※ recap: We're drafting FitLang's D1 spec; §4.2 lexical structure is done and journal entry 03 is written. Next: commit both files (no Claude attribution) and push to origin/main. (disable recaps in /config)
