@@ -1,0 +1,8 @@
+# MALFORMED: goal mode "shred" is not in the closed lexicon (bulk/cut/maintain only)
+# Expected error: "Expected goal mode: bulk, cut, or maintain"
+athlete(bodyweight: 78 kg, goal: shred) {
+    workout "Push Day" {
+        exercise "Bench Press" { sets: 4, reps: 6, weight: 80 kg }
+    }
+    plan week with workouts: ["Push Day"]
+}

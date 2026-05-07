@@ -1,0 +1,7 @@
+# MALFORMED: workout block contains no exercises — grammar requires at least one exercise
+# Expected error: "Workout ... must contain at least one exercise"
+athlete(bodyweight: 78 kg, goal: bulk) {
+    workout "Empty Day" {
+    }
+    plan week with workouts: ["Empty Day"]
+}

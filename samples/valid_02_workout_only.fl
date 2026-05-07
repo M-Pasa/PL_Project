@@ -1,0 +1,18 @@
+# Workout-only program — no nutrition section (diet-only and workout-only are both legal)
+athlete(bodyweight: 90 kg, goal: cut) {
+
+    workout "Pull Day" {
+        exercise "Deadlift"   { sets: 3, reps: 5, weight: 140 kg }
+        exercise "Barbell Row" { sets: 4, reps: 8, weight: 70 kg }
+        progress weight 2.5 kg/week
+    }
+
+    workout "Leg Day" {
+        exercise "Squat"      { sets: 4, reps: 5, weight: 100 kg }
+        exercise "Leg Press"  { sets: 3, reps: 10, weight: 120 kg }
+    }
+
+    goal lose 0.75 kg/week
+
+    plan week with workouts: ["Pull Day", "Leg Day"]
+}

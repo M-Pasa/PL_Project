@@ -1,0 +1,422 @@
+package fitlang;
+
+import fitlang.ast.Ast;
+import java.util.*;
+
+/**
+ * FitLang recursive-descent parser (LL(1)).
+ * One method per nonterminal; method names mirror the §4.3 EBNF productions.
+ */
+public final class Parser {
+
+    private final List<Token> tokens;
+    private int pos = 0;
+
+    public Parser(List<Token> tokens) { this.tokens = tokens; }
+
+    // ── Navigation ───────────────────────────────────────────────────────────
+
+    private Token peek()               { return tokens.get(pos); }
+    private Token advance()            { return tokens.get(pos++); }
+    private boolean check(Token.Type t){ return peek().type == t; }
+
+    private Token expect(Token.Type t) {
+        Token tok = peek();
+        if (tok.type != t)
+            throw new FitLangException(
+                "Expected " + t + " but got " + tok.type + " ('" + tok.lexeme + "')",
+                tok.line, tok.col);
+        return advance();
+    }
+
+    // ── Unit helpers ─────────────────────────────────────────────────────────
+
+    private boolean isUnit(Token.Type t) {
+        switch (t) {
+            case G: case KG: case LB:
+            case KCAL: case KJ:
+            case S: case MIN: case H: case DAY: case WEEK:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /** Consume the next token if it is a unit; throw otherwise. */
+    private Token expectUnit() {
+        Token tok = peek();
+        if (!isUnit(tok.type))
+            throw new FitLangException(
+                "Expected a unit (g/kg/lb/kcal/kJ/s/min/h/day/week) but got '" + tok.lexeme + "'",
+                tok.line, tok.col);
+        return advance();
+    }
+
+    // ── Entry point ──────────────────────────────────────────────────────────
+
+    /** Parse the entire source; return the top-level AST node. */
+    public Ast.AthleteBlock parse() {
+        Ast.AthleteBlock block = parseAthleteBlock();
+        expect(Token.Type.EOF);
+        return block;
+    }
+
+    // ── Productions ──────────────────────────────────────────────────────────
+
+    // <program> → <athlete-block>
+    // <athlete-block> → "athlete" "(" <athlete-params> ")" "{"
+    //                       <body-sections> <rules-section> <schedule-stmt>
+    //                   "}"
+    private Ast.AthleteBlock parseAthleteBlock() {
+        expect(Token.Type.ATHLETE);
+        expect(Token.Type.LPAREN);
+        Ast.AthleteParams params = parseAthleteParams();
+        expect(Token.Type.RPAREN);
+        expect(Token.Type.LBRACE);
+
+        // <body-sections> → <plan-section> [ <intake-section> ] | <intake-section>
+        List<Ast.WorkoutDecl> workouts = new ArrayList<>();
+        List<Ast.MealDecl>    meals    = new ArrayList<>();
+
+        if (check(Token.Type.WORKOUT)) {
+            do { workouts.add(parseWorkoutDecl()); } while (check(Token.Type.WORKOUT));
+            while (check(Token.Type.MEAL)) meals.add(parseMealDecl());
+        } else if (check(Token.Type.MEAL)) {
+            do { meals.add(parseMealDecl()); } while (check(Token.Type.MEAL));
+        } else {
+            Token t = peek();
+            throw new FitLangException(
+                "Expected 'workout' or 'meal' block inside athlete block", t.line, t.col);
+        }
+
+        // <rules-section> → { <rule-decl> }
+        List<Ast.RuleDecl> rules = new ArrayList<>();
+        while (check(Token.Type.TARGET) || check(Token.Type.GOAL) || check(Token.Type.LET)) {
+            rules.add(parseRuleDecl());
+        }
+
+        Ast.ScheduleStmt schedule = parseScheduleStmt();
+        expect(Token.Type.RBRACE);
+
+        return new Ast.AthleteBlock(params, workouts, meals, rules, schedule);
+    }
+
+    // <athlete-params> → "bodyweight" ":" <quantity> "," "goal" ":" <goal-mode>
+    private Ast.AthleteParams parseAthleteParams() {
+        expect(Token.Type.BODYWEIGHT);
+        expect(Token.Type.COLON);
+        Ast.Quantity bw = parseQuantity();
+        expect(Token.Type.COMMA);
+        expect(Token.Type.GOAL);
+        expect(Token.Type.COLON);
+        Ast.GoalMode mode = parseGoalMode();
+        return new Ast.AthleteParams(bw, mode);
+    }
+
+    // <goal-mode> → "bulk" | "cut" | "maintain"
+    private Ast.GoalMode parseGoalMode() {
+        Token t = peek();
+        switch (t.type) {
+            case BULK:     advance(); return Ast.GoalMode.BULK;
+            case CUT:      advance(); return Ast.GoalMode.CUT;
+            case MAINTAIN: advance(); return Ast.GoalMode.MAINTAIN;
+            default:
+                throw new FitLangException(
+                    "Expected goal mode: bulk, cut, or maintain", t.line, t.col);
+        }
+    }
+
+    // <workout-decl> → "workout" STRING_LIT "{" <exercise-decl>+ [ <progress-stmt> ] "}"
+    private Ast.WorkoutDecl parseWorkoutDecl() {
+        expect(Token.Type.WORKOUT);
+        String label = expect(Token.Type.STRING_LIT).lexeme;
+        expect(Token.Type.LBRACE);
+
+        if (!check(Token.Type.EXERCISE)) {
+            Token t = peek();
+            throw new FitLangException(
+                "Workout \"" + label + "\" must contain at least one exercise", t.line, t.col);
+        }
+        List<Ast.ExerciseDecl> exercises = new ArrayList<>();
+        do { exercises.add(parseExerciseDecl()); } while (check(Token.Type.EXERCISE));
+
+        Ast.ProgressStmt progress = null;
+        if (check(Token.Type.PROGRESS)) progress = parseProgressStmt();
+
+        expect(Token.Type.RBRACE);
+        return new Ast.WorkoutDecl(label, exercises, progress);
+    }
+
+    // <exercise-decl> → "exercise" STRING_LIT "{"
+    //                       "sets" ":" NUM_LIT ","
+    //                       "reps" ":" NUM_LIT ","
+    //                       "weight" ":" <quantity>
+    //                   "}"
+    private Ast.ExerciseDecl parseExerciseDecl() {
+        expect(Token.Type.EXERCISE);
+        String label = expect(Token.Type.STRING_LIT).lexeme;
+        expect(Token.Type.LBRACE);
+
+        expect(Token.Type.SETS);
+        expect(Token.Type.COLON);
+        Token setsTok = expect(Token.Type.NUM_LIT);
+
+        expect(Token.Type.COMMA);
+
+        expect(Token.Type.REPS);
+        expect(Token.Type.COLON);
+        Token repsTok = expect(Token.Type.NUM_LIT);
+
+        expect(Token.Type.COMMA);
+
+        expect(Token.Type.WEIGHT);
+        expect(Token.Type.COLON);
+        Ast.Quantity weight = parseQuantity();
+
+        expect(Token.Type.RBRACE);
+
+        return new Ast.ExerciseDecl(label,
+            parsePositiveInt(setsTok),
+            parsePositiveInt(repsTok),
+            weight);
+    }
+
+    private int parsePositiveInt(Token numTok) {
+        double d = Double.parseDouble(numTok.lexeme);
+        if (d != Math.floor(d) || d < 1)
+            throw new FitLangException(
+                "Expected a positive integer, got: " + numTok.lexeme, numTok.line, numTok.col);
+        return (int) d;
+    }
+
+    // <progress-stmt> → "progress" "weight" <rate>
+    private Ast.ProgressStmt parseProgressStmt() {
+        expect(Token.Type.PROGRESS);
+        expect(Token.Type.WEIGHT);
+        return new Ast.ProgressStmt(parseRate());
+    }
+
+    // <meal-decl> → "meal" STRING_LIT "{" <macro-decl>+ "}"
+    private Ast.MealDecl parseMealDecl() {
+        expect(Token.Type.MEAL);
+        String label = expect(Token.Type.STRING_LIT).lexeme;
+        expect(Token.Type.LBRACE);
+
+        if (!isMacroToken(peek().type)) {
+            Token t = peek();
+            throw new FitLangException(
+                "Meal \"" + label + "\" must contain at least one macro declaration (protein/carbs/fat)",
+                t.line, t.col);
+        }
+        List<Ast.MacroDecl> macros = new ArrayList<>();
+        do { macros.add(parseMacroDecl()); } while (isMacroToken(peek().type));
+
+        expect(Token.Type.RBRACE);
+        return new Ast.MealDecl(label, macros);
+    }
+
+    private boolean isMacroToken(Token.Type t) {
+        return t == Token.Type.PROTEIN || t == Token.Type.CARBS || t == Token.Type.FAT;
+    }
+
+    // <macro-decl> → <macro-name> ":" <quantity>
+    // <macro-name>  → "protein" | "carbs" | "fat"
+    private Ast.MacroDecl parseMacroDecl() {
+        Token t = peek();
+        Ast.MacroName name;
+        switch (t.type) {
+            case PROTEIN: advance(); name = Ast.MacroName.PROTEIN; break;
+            case CARBS:   advance(); name = Ast.MacroName.CARBS;   break;
+            case FAT:     advance(); name = Ast.MacroName.FAT;     break;
+            default:
+                throw new FitLangException("Expected macro name (protein/carbs/fat)", t.line, t.col);
+        }
+        expect(Token.Type.COLON);
+        return new Ast.MacroDecl(name, parseQuantity());
+    }
+
+    // <rule-decl> → <target-decl> | <goal-rate-decl> | <let-decl>
+    private Ast.RuleDecl parseRuleDecl() {
+        switch (peek().type) {
+            case TARGET: return parseTargetDecl();
+            case GOAL:   return parseGoalRateDecl();
+            case LET:    return parseLetDecl();
+            default:
+                Token t = peek();
+                throw new FitLangException(
+                    "Expected rule declaration (target/goal/let)", t.line, t.col);
+        }
+    }
+
+    // <target-decl> → "target" <macro-name> <rel-op> <quantity>
+    //                     [ "per" UNIT "of" "bodyweight" ]
+    private Ast.TargetDecl parseTargetDecl() {
+        expect(Token.Type.TARGET);
+        Token macroTok = peek();
+        Ast.MacroName macro;
+        switch (macroTok.type) {
+            case PROTEIN: advance(); macro = Ast.MacroName.PROTEIN; break;
+            case CARBS:   advance(); macro = Ast.MacroName.CARBS;   break;
+            case FAT:     advance(); macro = Ast.MacroName.FAT;     break;
+            default:
+                throw new FitLangException(
+                    "Expected macro name (protein/carbs/fat) after 'target'", macroTok.line, macroTok.col);
+        }
+        String relOp = parseRelOp();
+        Ast.Quantity qty = parseQuantity();
+
+        String perUnit = null;
+        Ast.UnitFamily perFamily = null;
+        if (check(Token.Type.PER)) {
+            advance();
+            Token unitTok = expectUnit();
+            perUnit   = unitTok.lexeme;
+            perFamily = Ast.familyOf(unitTok.type);
+            expect(Token.Type.OF);
+            expect(Token.Type.BODYWEIGHT);
+        }
+        return new Ast.TargetDecl(macro, relOp, qty, perUnit, perFamily);
+    }
+
+    private String parseRelOp() {
+        Token t = peek();
+        switch (t.type) {
+            case GTE:  advance(); return ">=";
+            case LTE:  advance(); return "<=";
+            case GT:   advance(); return ">";
+            case LT:   advance(); return "<";
+            case EQEQ: advance(); return "==";
+            case NEQ:  advance(); return "!=";
+            default:
+                throw new FitLangException(
+                    "Expected relational operator (>= <= > < == !=)", t.line, t.col);
+        }
+    }
+
+    // <goal-rate-decl> → "goal" <direction> <rate>
+    // <direction>       → "lose" | "gain"
+    private Ast.GoalRateDecl parseGoalRateDecl() {
+        expect(Token.Type.GOAL);
+        Token t = peek();
+        Ast.Direction dir;
+        switch (t.type) {
+            case LOSE: advance(); dir = Ast.Direction.LOSE; break;
+            case GAIN: advance(); dir = Ast.Direction.GAIN; break;
+            default:
+                throw new FitLangException(
+                    "Expected direction 'lose' or 'gain' after 'goal'", t.line, t.col);
+        }
+        return new Ast.GoalRateDecl(dir, parseRate());
+    }
+
+    // <let-decl> → "let" IDENT "=" <expression>
+    private Ast.LetDecl parseLetDecl() {
+        expect(Token.Type.LET);
+        String name = expect(Token.Type.IDENT).lexeme;
+        expect(Token.Type.ASSIGN);
+        return new Ast.LetDecl(name, parseExpression());
+    }
+
+    // <schedule-stmt> → "plan" "week" "with" <schedule-clauses>
+    private Ast.ScheduleStmt parseScheduleStmt() {
+        expect(Token.Type.PLAN);
+        expect(Token.Type.WEEK);
+        expect(Token.Type.WITH);
+        return parseScheduleClauses();
+    }
+
+    // <schedule-clauses>
+    //   → "workouts" ":" <name-list> [ "," "meals" ":" <name-list> ]
+    //   | "meals"    ":" <name-list>
+    private Ast.ScheduleStmt parseScheduleClauses() {
+        List<String> workouts = null;
+        List<String> meals    = null;
+
+        if (check(Token.Type.WORKOUTS)) {
+            advance();
+            expect(Token.Type.COLON);
+            workouts = parseNameList();
+            if (check(Token.Type.COMMA)) {
+                advance();
+                expect(Token.Type.MEALS);
+                expect(Token.Type.COLON);
+                meals = parseNameList();
+            }
+        } else if (check(Token.Type.MEALS)) {
+            advance();
+            expect(Token.Type.COLON);
+            meals = parseNameList();
+        } else {
+            Token t = peek();
+            throw new FitLangException(
+                "Expected 'workouts' or 'meals' clause in plan statement", t.line, t.col);
+        }
+        return new Ast.ScheduleStmt(workouts, meals);
+    }
+
+    // <name-list> → "[" STRING_LIT { "," STRING_LIT } "]"
+    private List<String> parseNameList() {
+        expect(Token.Type.LBRACKET);
+        List<String> names = new ArrayList<>();
+        names.add(expect(Token.Type.STRING_LIT).lexeme);
+        while (check(Token.Type.COMMA)) {
+            advance();
+            names.add(expect(Token.Type.STRING_LIT).lexeme);
+        }
+        expect(Token.Type.RBRACKET);
+        return names;
+    }
+
+    // <quantity> → NUM_LIT UNIT
+    private Ast.Quantity parseQuantity() {
+        Token numTok  = expect(Token.Type.NUM_LIT);
+        Token unitTok = expectUnit();
+        return new Ast.Quantity(
+            Double.parseDouble(numTok.lexeme),
+            unitTok.lexeme,
+            Ast.familyOf(unitTok.type));
+    }
+
+    // <rate> → NUM_LIT UNIT "/" UNIT
+    private Ast.Rate parseRate() {
+        Token numTok   = expect(Token.Type.NUM_LIT);
+        Token numerTok = expectUnit();
+        expect(Token.Type.SLASH);
+        Token denomTok = expectUnit();
+        return new Ast.Rate(
+            Double.parseDouble(numTok.lexeme),
+            numerTok.lexeme, Ast.familyOf(numerTok.type),
+            denomTok.lexeme, Ast.familyOf(denomTok.type));
+    }
+
+    // <expression> → <term> { <add-op> <term> }
+    private Ast.Expr parseExpression() {
+        Ast.Expr left = parseTerm();
+        while (check(Token.Type.PLUS) || check(Token.Type.MINUS)) {
+            String op    = advance().lexeme;
+            Ast.Expr right = parseTerm();
+            left = new Ast.BinaryExpr(left, op, right);
+        }
+        return left;
+    }
+
+    // <term> → <quantity> | NUM_LIT | IDENT
+    // Disambiguate NUM_LIT vs <quantity> by looking one token ahead.
+    private Ast.Expr parseTerm() {
+        Token t = peek();
+        if (t.type == Token.Type.NUM_LIT) {
+            // quantity if the next token is a unit, otherwise bare number
+            boolean nextIsUnit = (pos + 1 < tokens.size())
+                && isUnit(tokens.get(pos + 1).type);
+            if (nextIsUnit) return new Ast.QuantityExpr(parseQuantity());
+            advance();
+            return new Ast.NumExpr(Double.parseDouble(t.lexeme));
+        }
+        if (t.type == Token.Type.IDENT) {
+            advance();
+            return new Ast.IdentExpr(t.lexeme);
+        }
+        throw new FitLangException(
+            "Expected expression term (number, quantity, or identifier)", t.line, t.col);
+    }
+}

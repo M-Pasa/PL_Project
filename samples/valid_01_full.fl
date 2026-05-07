@@ -1,0 +1,20 @@
+# Full FitLang example — bulk phase with workout + nutrition + rules
+athlete(bodyweight: 78 kg, goal: bulk) {
+
+    workout "Push Day" {
+        exercise "Bench Press"    { sets: 4, reps: 6, weight: 80 kg }
+        exercise "Overhead Press" { sets: 3, reps: 8, weight: 50 kg }
+        progress weight 2.5 kg/week
+    }
+
+    meal "Breakfast" {
+        protein: 40 g
+        carbs:   80 g
+        fat:     15 g
+    }
+
+    target protein >= 1.8 g per kg of bodyweight
+    goal   lose 0.5 kg/week
+
+    plan week with workouts: ["Push Day"], meals: ["Breakfast"]
+}

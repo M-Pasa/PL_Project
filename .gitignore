@@ -1,6 +1,9 @@
 # Claude Code local state
 .claude/
 
+# Compiled output
+out/
+
 # Compiled class file
 *.class
 

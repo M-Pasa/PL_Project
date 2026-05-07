@@ -1,0 +1,12 @@
+# MALFORMED: no plan statement — grammar requires exactly one schedule-stmt to close the block
+# Expected error: "Expected PLAN but got ..."
+athlete(bodyweight: 78 kg, goal: bulk) {
+    workout "Push Day" {
+        exercise "Bench Press" { sets: 4, reps: 6, weight: 80 kg }
+    }
+    meal "Breakfast" {
+        protein: 40 g
+        carbs:   80 g
+        fat:     15 g
+    }
+}

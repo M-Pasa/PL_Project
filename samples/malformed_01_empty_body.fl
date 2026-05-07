@@ -1,0 +1,5 @@
+# MALFORMED: athlete block has no workout or meal — grammar requires at least one
+# Expected error: "Expected 'workout' or 'meal' block inside athlete block"
+athlete(bodyweight: 78 kg, goal: bulk) {
+    plan week with workouts: ["Push Day"]
+}
