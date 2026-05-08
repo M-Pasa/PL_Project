@@ -4,6 +4,9 @@
 # Compiled output
 out/
 
+# Submission build artifacts (PDFs, zips, intermediate .tex.md)
+build/
+
 # Compiled class file
 *.class
 
