@@ -65,6 +65,7 @@ public final class Parser {
 
     // <program> → <athlete-block>
     // <athlete-block> → "athlete" "(" <athlete-params> ")" "{"
+    //                       { <routine-decl> }
     //                       <body-sections> <rules-section> <schedule-stmt>
     //                   "}"
     private Ast.AthleteBlock parseAthleteBlock() {
@@ -73,6 +74,10 @@ public final class Parser {
         Ast.AthleteParams params = parseAthleteParams();
         expect(Token.Type.RPAREN);
         expect(Token.Type.LBRACE);
+
+        // Routine declarations (athlete scope, before workouts)
+        List<Ast.RoutineDecl> routines = new ArrayList<>();
+        while (check(Token.Type.ROUTINE)) routines.add(parseRoutineDecl());
 
         // <body-sections> → <plan-section> [ <intake-section> ] | <intake-section>
         List<Ast.WorkoutDecl> workouts = new ArrayList<>();
@@ -91,14 +96,21 @@ public final class Parser {
 
         // <rules-section> → { <rule-decl> }
         List<Ast.RuleDecl> rules = new ArrayList<>();
-        while (check(Token.Type.TARGET) || check(Token.Type.GOAL) || check(Token.Type.LET)) {
+        while (isRuleStart(peek().type)) {
             rules.add(parseRuleDecl());
         }
 
         Ast.ScheduleStmt schedule = parseScheduleStmt();
         expect(Token.Type.RBRACE);
 
-        return new Ast.AthleteBlock(params, workouts, meals, rules, schedule);
+        return new Ast.AthleteBlock(params, routines, workouts, meals, rules, schedule);
+    }
+
+    private boolean isRuleStart(Token.Type t) {
+        return t == Token.Type.TARGET
+            || t == Token.Type.GOAL
+            || t == Token.Type.LET
+            || t == Token.Type.WHEN;
     }
 
     // <athlete-params> → "bodyweight" ":" <quantity> "," "goal" ":" <goal-mode>
@@ -126,16 +138,46 @@ public final class Parser {
         }
     }
 
-    // <workout-decl> → "workout" STRING_LIT "{" <exercise-decl>+ [ <progress-stmt> ] "}"
+    // <workout-decl> → "workout" STRING_LIT "{" <workout-item>+ [ <progress-stmt> ] "}"
+    // <workout-item> → <exercise-decl> | <routine-call>
     private Ast.WorkoutDecl parseWorkoutDecl() {
         expect(Token.Type.WORKOUT);
         String label = expect(Token.Type.STRING_LIT).lexeme;
         expect(Token.Type.LBRACE);
 
+        if (!check(Token.Type.EXERCISE) && !check(Token.Type.USE)) {
+            Token t = peek();
+            throw new FitLangException(
+                "Workout \"" + label + "\" must contain at least one exercise or routine call",
+                t.line, t.col);
+        }
+        List<Ast.WorkoutItem> items = new ArrayList<>();
+        while (check(Token.Type.EXERCISE) || check(Token.Type.USE)) {
+            if (check(Token.Type.EXERCISE)) items.add(parseExerciseDecl());
+            else                            items.add(parseRoutineCall());
+        }
+
+        Ast.ProgressStmt progress = null;
+        if (check(Token.Type.PROGRESS)) progress = parseProgressStmt();
+
+        expect(Token.Type.RBRACE);
+        return new Ast.WorkoutDecl(label, items, progress);
+    }
+
+    // <routine-decl> → "routine" STRING_LIT "(" <routine-params> ")"
+    //                  "{" <exercise-decl>+ [ <progress-stmt> ] "}"
+    private Ast.RoutineDecl parseRoutineDecl() {
+        expect(Token.Type.ROUTINE);
+        String label = expect(Token.Type.STRING_LIT).lexeme;
+        expect(Token.Type.LPAREN);
+        List<Ast.RoutineParam> params = parseRoutineParams();
+        expect(Token.Type.RPAREN);
+        expect(Token.Type.LBRACE);
+
         if (!check(Token.Type.EXERCISE)) {
             Token t = peek();
             throw new FitLangException(
-                "Workout \"" + label + "\" must contain at least one exercise", t.line, t.col);
+                "Routine \"" + label + "\" must contain at least one exercise", t.line, t.col);
         }
         List<Ast.ExerciseDecl> exercises = new ArrayList<>();
         do { exercises.add(parseExerciseDecl()); } while (check(Token.Type.EXERCISE));
@@ -144,7 +186,41 @@ public final class Parser {
         if (check(Token.Type.PROGRESS)) progress = parseProgressStmt();
 
         expect(Token.Type.RBRACE);
-        return new Ast.WorkoutDecl(label, exercises, progress);
+        return new Ast.RoutineDecl(label, params, exercises, progress);
+    }
+
+    // <routine-params> → IDENT ":" UNIT { "," IDENT ":" UNIT }
+    private List<Ast.RoutineParam> parseRoutineParams() {
+        List<Ast.RoutineParam> params = new ArrayList<>();
+        params.add(parseOneRoutineParam());
+        while (check(Token.Type.COMMA)) {
+            advance();
+            params.add(parseOneRoutineParam());
+        }
+        return params;
+    }
+
+    private Ast.RoutineParam parseOneRoutineParam() {
+        Token nameTok = expect(Token.Type.IDENT);
+        expect(Token.Type.COLON);
+        Token unitTok = expectUnit();
+        return new Ast.RoutineParam(
+            nameTok.lexeme, unitTok.lexeme, Ast.familyOf(unitTok.type));
+    }
+
+    // <routine-call> → "use" STRING_LIT "(" <quantity> { "," <quantity> } ")"
+    private Ast.RoutineCall parseRoutineCall() {
+        expect(Token.Type.USE);
+        String label = expect(Token.Type.STRING_LIT).lexeme;
+        expect(Token.Type.LPAREN);
+        List<Ast.Quantity> args = new ArrayList<>();
+        args.add(parseQuantity());
+        while (check(Token.Type.COMMA)) {
+            advance();
+            args.add(parseQuantity());
+        }
+        expect(Token.Type.RPAREN);
+        return new Ast.RoutineCall(label, args);
     }
 
     // <exercise-decl> → "exercise" STRING_LIT "{"
@@ -235,17 +311,42 @@ public final class Parser {
         return new Ast.MacroDecl(name, parseQuantity());
     }
 
-    // <rule-decl> → <target-decl> | <goal-rate-decl> | <let-decl>
+    // <rule-decl> → <target-decl> | <goal-rate-decl> | <let-decl> | <when-decl>
     private Ast.RuleDecl parseRuleDecl() {
         switch (peek().type) {
             case TARGET: return parseTargetDecl();
             case GOAL:   return parseGoalRateDecl();
             case LET:    return parseLetDecl();
+            case WHEN:   return parseWhenDecl();
             default:
                 Token t = peek();
                 throw new FitLangException(
-                    "Expected rule declaration (target/goal/let)", t.line, t.col);
+                    "Expected rule declaration (target/goal/let/when)", t.line, t.col);
         }
+    }
+
+    // <when-decl> → "when" "goal" ":" <goal-mode>
+    //                   "{" { <rule-decl> } "}"
+    //                   [ "else" "{" { <rule-decl> } "}" ]
+    private Ast.WhenDecl parseWhenDecl() {
+        expect(Token.Type.WHEN);
+        expect(Token.Type.GOAL);
+        expect(Token.Type.COLON);
+        Ast.GoalMode mode = parseGoalMode();
+        expect(Token.Type.LBRACE);
+        List<Ast.RuleDecl> thenRules = new ArrayList<>();
+        while (isRuleStart(peek().type)) thenRules.add(parseRuleDecl());
+        expect(Token.Type.RBRACE);
+
+        List<Ast.RuleDecl> elseRules = null;
+        if (check(Token.Type.ELSE)) {
+            advance();
+            expect(Token.Type.LBRACE);
+            elseRules = new ArrayList<>();
+            while (isRuleStart(peek().type)) elseRules.add(parseRuleDecl());
+            expect(Token.Type.RBRACE);
+        }
+        return new Ast.WhenDecl(mode, thenRules, elseRules);
     }
 
     // <target-decl> → "target" <macro-name> <rel-op> <quantity>

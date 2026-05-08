@@ -8,6 +8,8 @@ public final class Token {
         WITH, WORKOUTS, MEALS, LET, BODYWEIGHT,
         SETS, REPS, WEIGHT, PROTEIN, CARBS, FAT,
         PER, OF, AND,
+        // Control structure + routine template (§4.3 extension)
+        WHEN, ELSE, ROUTINE, USE,
         // Mode literals
         BULK, CUT, MAINTAIN, LOSE, GAIN,
         // Unit tokens — mass

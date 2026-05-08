@@ -144,3 +144,5 @@ samples/
 - **`week` is dual** (D1 §4.2.6): the scanner emits a single `WEEK` token; the parser accepts it as both a reserved word (in `plan week with`) and a time-family unit (in rates like `2.5 kg/week`).
 - **Quantities are parser-level pairs** (D1 §4.3.4): the lexer emits `NUM_LIT` and `UNIT` separately; `parseQuantity()` fuses them and attaches the dimensional family.
 - **One-token lookahead** everywhere: each production alternative is selected by a unique token in its FIRST set; no backtracking is needed.
+- **Control structure** (D1 §4.3.2 `<when-decl>`): `when goal: <mode> { ... } [ else { ... } ]` selects between two rule sub-blocks based on the static goal mode bound in `<athlete-params>`. Dispatch is decidable at parse time.
+- **User-defined templates** (D1 §4.3.2 `<routine-decl>` / `<routine-call>`): `routine "Name"(p1: kg, p2: kg) { ... }` declares a parameterised exercise group at athlete scope; `use "Name"(82 kg, 22 kg)` instantiates it inside a `<workout-decl>` body. Routine declarations precede `<body-sections>` so calls always resolve to an earlier declaration.

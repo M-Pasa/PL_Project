@@ -1,10 +1,21 @@
 # Workout-only program — no nutrition section (diet-only and workout-only are both legal)
+# Demonstrates routine declaration (parameterized template) and routine call.
 athlete(bodyweight: 90 kg, goal: cut) {
+
+    routine "Base Press"(load: kg, accessory_load: kg) {
+        exercise "Bench Press"    { sets: 4, reps: 6, weight: 80 kg }
+        exercise "Overhead Press" { sets: 3, reps: 8, weight: 50 kg }
+    }
 
     workout "Pull Day" {
         exercise "Deadlift"   { sets: 3, reps: 5, weight: 140 kg }
         exercise "Barbell Row" { sets: 4, reps: 8, weight: 70 kg }
         progress weight 2.5 kg/week
+    }
+
+    workout "Push Day" {
+        use "Base Press"(82 kg, 22 kg)
+        exercise "Triceps Pushdown" { sets: 3, reps: 12, weight: 30 kg }
     }
 
     workout "Leg Day" {
@@ -14,5 +25,5 @@ athlete(bodyweight: 90 kg, goal: cut) {
 
     goal lose 0.75 kg/week
 
-    plan week with workouts: ["Pull Day", "Leg Day"]
+    plan week with workouts: ["Pull Day", "Push Day", "Leg Day"]
 }

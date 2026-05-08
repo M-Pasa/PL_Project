@@ -30,6 +30,7 @@ public final class AstDumper {
         line("AthleteBlock");
         push();
         dumpAthleteParams(b.params);
+        for (Ast.RoutineDecl r : b.routines) dumpRoutineDecl(r);
         for (Ast.WorkoutDecl w : b.workouts) dumpWorkoutDecl(w);
         for (Ast.MealDecl   m : b.meals)    dumpMealDecl(m);
         if (!b.rules.isEmpty()) {
@@ -53,10 +54,39 @@ public final class AstDumper {
     private void dumpWorkoutDecl(Ast.WorkoutDecl w) {
         line("WorkoutDecl \"" + w.label + "\"");
         push();
-        for (Ast.ExerciseDecl e : w.exercises) dumpExerciseDecl(e);
+        for (Ast.WorkoutItem it : w.items) {
+            if (it instanceof Ast.ExerciseDecl) dumpExerciseDecl((Ast.ExerciseDecl) it);
+            else if (it instanceof Ast.RoutineCall) dumpRoutineCall((Ast.RoutineCall) it);
+        }
         if (w.progress != null)
             line("ProgressStmt rate=" + w.progress.rate);
         pop();
+    }
+
+    private void dumpRoutineDecl(Ast.RoutineDecl r) {
+        StringBuilder sig = new StringBuilder();
+        for (int i = 0; i < r.params.size(); i++) {
+            if (i > 0) sig.append(", ");
+            Ast.RoutineParam p = r.params.get(i);
+            sig.append(p.name).append(":").append(p.unit)
+               .append(" [").append(p.family).append("]");
+        }
+        line("RoutineDecl \"" + r.label + "\" (" + sig + ")");
+        push();
+        for (Ast.ExerciseDecl e : r.exercises) dumpExerciseDecl(e);
+        if (r.progress != null)
+            line("ProgressStmt rate=" + r.progress.rate);
+        pop();
+    }
+
+    private void dumpRoutineCall(Ast.RoutineCall c) {
+        StringBuilder args = new StringBuilder();
+        for (int i = 0; i < c.args.size(); i++) {
+            if (i > 0) args.append(", ");
+            Ast.Quantity q = c.args.get(i);
+            args.append(q).append(" [").append(q.family).append("]");
+        }
+        line("RoutineCall \"" + c.label + "\" (" + args + ")");
     }
 
     private void dumpExerciseDecl(Ast.ExerciseDecl e) {
@@ -91,6 +121,21 @@ public final class AstDumper {
         } else if (r instanceof Ast.LetDecl) {
             Ast.LetDecl ld = (Ast.LetDecl) r;
             line("LetDecl " + ld.name + " = " + exprStr(ld.expr));
+        } else if (r instanceof Ast.WhenDecl) {
+            Ast.WhenDecl w = (Ast.WhenDecl) r;
+            line("WhenDecl goal=" + w.mode.name().toLowerCase());
+            push();
+            line("then");
+            push();
+            for (Ast.RuleDecl tr : w.thenRules) dumpRuleDecl(tr);
+            pop();
+            if (w.elseRules != null) {
+                line("else");
+                push();
+                for (Ast.RuleDecl er : w.elseRules) dumpRuleDecl(er);
+                pop();
+            }
+            pop();
         }
     }
 

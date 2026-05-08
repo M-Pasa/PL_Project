@@ -100,7 +100,10 @@ public final class Ast {
 
     // ── Declaration nodes ────────────────────────────────────────────────────
 
-    public static final class ExerciseDecl {
+    /** Items that may appear inside a workout body: an inline exercise or a routine call. */
+    public interface WorkoutItem {}
+
+    public static final class ExerciseDecl implements WorkoutItem {
         public final String   label;
         public final int      sets;
         public final int      reps;
@@ -114,6 +117,43 @@ public final class Ast {
         }
     }
 
+    public static final class RoutineParam {
+        public final String     name;
+        public final String     unit;    // e.g. "kg", "g", "week"
+        public final UnitFamily family;
+
+        public RoutineParam(String name, String unit, UnitFamily family) {
+            this.name   = name;
+            this.unit   = unit;
+            this.family = family;
+        }
+    }
+
+    public static final class RoutineDecl {
+        public final String             label;
+        public final List<RoutineParam> params;
+        public final List<ExerciseDecl> exercises;
+        public final ProgressStmt       progress; // null if absent
+
+        public RoutineDecl(String label, List<RoutineParam> params,
+                           List<ExerciseDecl> exercises, ProgressStmt progress) {
+            this.label     = label;
+            this.params    = params;
+            this.exercises = exercises;
+            this.progress  = progress;
+        }
+    }
+
+    public static final class RoutineCall implements WorkoutItem {
+        public final String         label;
+        public final List<Quantity> args;
+
+        public RoutineCall(String label, List<Quantity> args) {
+            this.label = label;
+            this.args  = args;
+        }
+    }
+
     public static final class ProgressStmt {
         public final Rate rate;
         public ProgressStmt(Rate rate) { this.rate = rate; }
@@ -121,13 +161,13 @@ public final class Ast {
 
     public static final class WorkoutDecl {
         public final String            label;
-        public final List<ExerciseDecl> exercises;
-        public final ProgressStmt      progress; // null if absent
+        public final List<WorkoutItem> items;     // exercises and/or routine calls
+        public final ProgressStmt      progress;  // null if absent
 
-        public WorkoutDecl(String label, List<ExerciseDecl> exercises, ProgressStmt progress) {
-            this.label     = label;
-            this.exercises = exercises;
-            this.progress  = progress;
+        public WorkoutDecl(String label, List<WorkoutItem> items, ProgressStmt progress) {
+            this.label    = label;
+            this.items    = items;
+            this.progress = progress;
         }
     }
 
@@ -182,6 +222,22 @@ public final class Ast {
         }
     }
 
+    /**
+     * Conditional rule block: rules that apply only when the athlete's goal
+     * matches the named mode, with an optional else-branch.
+     */
+    public static final class WhenDecl implements RuleDecl {
+        public final GoalMode       mode;
+        public final List<RuleDecl> thenRules;
+        public final List<RuleDecl> elseRules; // null if no else-branch
+
+        public WhenDecl(GoalMode mode, List<RuleDecl> thenRules, List<RuleDecl> elseRules) {
+            this.mode      = mode;
+            this.thenRules = thenRules;
+            this.elseRules = elseRules;
+        }
+    }
+
     public static final class LetDecl implements RuleDecl {
         public final String name;
         public final Expr   expr;
@@ -217,16 +273,18 @@ public final class Ast {
     }
 
     public static final class AthleteBlock {
-        public final AthleteParams    params;
+        public final AthleteParams     params;
+        public final List<RoutineDecl> routines;
         public final List<WorkoutDecl> workouts;
         public final List<MealDecl>    meals;
         public final List<RuleDecl>    rules;
-        public final ScheduleStmt     schedule;
+        public final ScheduleStmt      schedule;
 
-        public AthleteBlock(AthleteParams params, List<WorkoutDecl> workouts,
-                            List<MealDecl> meals, List<RuleDecl> rules,
-                            ScheduleStmt schedule) {
+        public AthleteBlock(AthleteParams params, List<RoutineDecl> routines,
+                            List<WorkoutDecl> workouts, List<MealDecl> meals,
+                            List<RuleDecl> rules, ScheduleStmt schedule) {
             this.params   = params;
+            this.routines = routines;
             this.workouts = workouts;
             this.meals    = meals;
             this.rules    = rules;

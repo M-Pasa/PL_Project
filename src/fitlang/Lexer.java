@@ -37,6 +37,11 @@ public final class Lexer {
         KEYWORDS.put("per",        Token.Type.PER);
         KEYWORDS.put("of",         Token.Type.OF);
         KEYWORDS.put("and",        Token.Type.AND);
+        // Control structure + routine template (§4.3 extension)
+        KEYWORDS.put("when",       Token.Type.WHEN);
+        KEYWORDS.put("else",       Token.Type.ELSE);
+        KEYWORDS.put("routine",    Token.Type.ROUTINE);
+        KEYWORDS.put("use",        Token.Type.USE);
         // Mode literals (§4.2.5) — in the same closed lexicon, different token class
         KEYWORDS.put("bulk",       Token.Type.BULK);
         KEYWORDS.put("cut",        Token.Type.CUT);
