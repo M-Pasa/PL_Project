@@ -1,0 +1,1610 @@
+ ▐▛███▜▌   Claude Code v2.1.143
+▝▜█████▛▘  Opus 4.7 · Claude Pro
+  ▘▘ ▝▝    ~\OneDrive\Documents\Projects\PL\PL_Project
+
+❯ hey wassup                                                                    
+
+● Hey! Just here, ready to work on FitLang or whatever's next. What're we doing
+  today?
+
+✻ Brewed for 3s
+
+❯ yeah, we did the quiz on part1 and now we should work on p2                   
+
+  Listed 3 directories, recalled 1 memory (ctrl+o to expand)
+
+● Cool. Quiz behind us — Part 2 is due Fri May 22 (6 days). The bundle adds:
+
+  - D1: §4.4 Semantics, §4.5 Type System, §4.7 Expressions, §4.8 Rationale
+  - D2: type checker + interpreter on top of the existing lexer/parser
+  - D3: programs with executed outputs + one type-error program
+  - D4: ≥6 more entries including E2 (name vs structural equivalence) and E3 (AI
+   implements type checker, test ≥3 inputs)
+  - D5: full-page retro + self-assessment
+
+  Where do you want to start? A few sensible orderings:
+
+● User answered Claude's questions:
+  ⎿  · How do you want to kick off Part 2? → Spec first (D1 §4.4/4.5)
+
+  Read 1 file (ctrl+o to expand)
+
+● D1 is in good shape — the P1 sections are solid and §4.4/4.5/4.7/4.8 have
+  placeholder stubs waiting to be filled.
+
+  Before I draft, the biggest open call is in §4.5 Type System and it's also
+  exactly what E2 asks: name vs structural equivalence for FitLang's record type
+   (the exercise block). The choice shapes everything else — what counts as "the
+   same exercise schema," whether a future routine parameter can accept any
+  record with matching fields, and how errors read.
+
+● User declined to answer questions
+  ⎿  · Which type-equivalence rule do you want for FitLang's exercise/meal 
+     records? (Name equivalence (Recommended) / Structural equivalence / Hybrid 
+     (name for built-ins, structural for user))
+
+● What would you like to clarify? I can rephrase the question, explain any of
+  the options in more depth, or zoom out and talk through what §4.5 needs to
+  cover before we pick the equivalence rule.
+
+✻ Brewed for 49s
+
+❯ first of all we agree that a meal will not be equivalent to an exercise.      
+  secondly, should we say equivelent for meals and exercise just looking to     
+  their name? Or their name and other spec if they match one to one?            
+
+● Good — both points sharpen the picture. Let me lay it out:
+
+  Point 1 — meal ≠ exercise. Agreed and forced by the grammar: meal and exercise
+   are different reserved words, so the parser already emits two distinct AST
+  node kinds. No type rule has to "decide" they're different — they never reach
+  the same equivalence test.
+
+  Point 2 — within a kind (two exercises, or two meals). Here's the thing: §4.3
+  fixes one schema per kind. Every <exercise-decl> has exactly sets, reps, 
+  weight in that order; every <meal-decl> has only protein, carbs, fat in any
+  order. The grammar doesn't admit an exercise with extra or missing fields. So:
+
+  - Name equivalence answer: two exercises are the same type because both are
+  "an exercise."
+  - Structural equivalence answer: two exercises are the same type because their
+   fields match 1-to-1.
+  - In FitLang these collapse to the same answer — because the grammar
+  guarantees every exercise has the same structure, name ⇔ structural for
+  built-in records.
+
+  The meaningful difference only appears if users can define their own schemas
+  (e.g. an exercise2 { sets, reps, weight, tempo }). FitLang has no such syntax,
+   so the distinction is hypothetical.
+
+  Recommendation: call it name equivalence, because (a) the kind keyword
+  (exercise / meal) is what carries identity, (b) it's the rule you can defend
+  in one sentence in the quiz — "two values are the same type iff they were
+  built from the same declared schema kind" — and (c) it matches how the parser
+  actually tags nodes. The E2 experiment then has a clean comparison: AI will
+  likely also suggest structural; you note they coincide here, and explain why
+  you picked name (kind keyword is load-bearing; future schema extensions would
+  need a new keyword, not a structural reshape).
+
+  Want to lock that in and move to drafting §4.5, or push on it more?
+
+✻ Worked for 23s
+
+❯ before that, we had let but it was non finctional. What can I use let with?   
+  only values or exercises adn meals too?                                       
+
+● Good catch — let is in the P1 grammar but the interpreter/checker never
+  honored it, so P2 has to decide what it actually binds. Three plausible
+  scopes:
+
+  Option A — Scalars + quantities only (recommended).
+  let workingWeight = 80 kg, let dailyKcal = 2800 kcal, let proteinPerKg = 1.8 
+  g. Reference them anywhere an <expression> is admitted — inside exercise { 
+  weight: workingWeight }, inside target protein >= proteinPerKg per kg of 
+  bodyweight. This is Sebesta §5.8 named constants (Pascal const, Ada constant,
+  C #define/const, Rust const).
+
+  Why this fits FitLang: the actual reuse pain in a real training program is "I
+  want my top-set weight to appear in three exercises and stay in sync if I bump
+   it." That's a scalar/quantity problem. Naming a number once is exactly what
+  let is for.
+
+  Option B — Also let-bind exercises and meals.
+  let bench = exercise "..." { ... }, then put bench inside a workout body.
+  Don't do this. It duplicates two existing mechanisms:
+  - routine "Bench Triple" (load: kg) { exercise ... } already covers
+  parameterized exercise reuse.
+  - workout "Push Day" { ... } already names a workout via its STRING_LIT label.
+
+  You'd end up with two name spaces fighting ("Bench Press" the label vs bench
+  the IDENT) and an awkward question of how a let-bound exercise enters a
+  workout. Plus it breaks the §4.6.1 "labels in the string space, scalars in the
+   IDENT space" cleanliness.
+
+  Option C — Also bind rates (let bulkRate = 0.25 kg/week).
+  Cheap extension of A — same type rules, just adds <rate> to the RHS. Useful
+  for goal gain bulkRate and progress weight bulkRate. I'd fold this into A.
+
+  Recommendation: A + C. let binds scalars, quantities, and rates. One sentence
+  to defend: "let introduces named constants for numeric values (Sebesta §5.8); 
+  everything that has a label in the domain already gets one in the string-label
+   space."
+
+  Sound right? If yes, I'll fold it into §4.5 along with the name-equivalence
+  call and start drafting.
+
+✻ Crunched for 26s
+
+❯ nice, A + C and nem equivilece sounds good                                    
+
+● Locked in. I'll draft §4.5 now — it'll cover: primitive types, strong typing
+  stance, dimensional families & coercion, rate algebra, name equivalence, let
+  bindings, record-kind design.
+
+● Update(docs\design\D1.md)
+  ⎿  Added 107 lines, removed 1 line
+      300  
+      301  ## 4.5 Type System **[P2]**
+      302  
+      303 -*Full type system spec — added for Part 2 submission. Will doc
+          -ument: primitive types and their value sets; strong typing jus
+          -tification; dimensional coercion rules within / across familie
+          -s; rate cancellation rule; type equivalence (name vs. structur
+          -al); structured type design (record/block schema).*           
+      303 +### 4.5.1 Type universe                                       
+      304  
+      305 +FitLang has a small, closed type universe — there is no syntax
+          + for the user to introduce a new type, only to use the ones th
+          +e language gives:                                             
+      306 +                                                              
+      307 +| Category | Types |                                          
+      308 +|---|---|                                                     
+      309 +| **Scalar** | `Number` |                                     
+      310 +| **Quantity** (dimensional family + canonical unit) | `Mass` 
+          +(canonical `g`), `Energy` (canonical `kcal`), `Time` (canonica
+          +l `s`) |                                                      
+      311 +| **Rate** (quotient of two quantities) | `Rate(D₁, D₂)` for a
+          +ny two families D₁, D₂ — in practice only `Rate(Mass, Time)` (
+          +`kg/week`) appears in P1 idiom |                              
+      312 +| **Mode** (finite enumeration) | `GoalMode = { bulk, cut, mai
+          +ntain }`, `Direction = { lose, gain }` |                      
+      313 +| **Label** | `String` (only as the head of a `<workout-decl>`
+          + / `<exercise-decl>` / `<meal-decl>` / `<routine-decl>`; not f
+          +irst-class — no string operations) |                          
+      314 +| **Record kind** | `Exercise`, `Meal`, `Workout`, `Routine` —
+          + each a fixed schema named by its kind keyword (§4.5.6) |     
+      315 +                                                              
+      316 +Every `IDENT` introduced by `<let-decl>` has one of the three 
+          +RHS-admissible types — `Number`, `Quantity D`, or `Rate(D₁, D₂
+          +)` — fixed at its binding site. Labels and record kinds are no
+          +t nameable through `IDENT`; they live in the string-label spac
+          +e of §4.6.1 and the parser-tagged AST node space respectively.
+      317 +                                                              
+      318 +### 4.5.2 Strong typing stance                                
+      319 +                                                              
+      320 +FitLang is **strongly typed** in Sebesta §6.12's sense: every 
+          +type error is caught — at compile time in our case — and no op
+          +eration silently coerces across the dimensional families of §4
+          +.5.4. This is the same trade-off Sebesta credits Java for taki
+          +ng against C in §1.6: we pay a small ergonomic cost (the user 
+          +occasionally annotates a unit they "obviously" meant) and in r
+          +eturn remove a whole class of plan-corrupting bugs — a meal wh
+          +ose `protein: 80 kcal` slipped past, a `progress weight 2.5 kc
+          +al/week` that would have shifted a bulk into nonsense.        
+      321 +                                                              
+      322 +The closed type universe of §4.5.1 is what makes strong typing
+          + affordable: with no user-defined types, no inheritance, no ge
+          +nerics beyond the parametric `Rate(D₁, D₂)`, the type checker 
+          +is a single linear pass over the AST with O(declarations) work
+          + — the property Sebesta lists in §6.12 as the practical price 
+          +of strong typing in ML/Ada and the practical reason C ducks it
+          +.                                                             
+      323 +                                                              
+      324 +### 4.5.3 Type equivalence — name, not structural             
+      325 +                                                              
+      326 +Two values have the same type iff their type expressions are s
+          +pelled the same in §4.5.1's universe. Concretely:             
+      327 +                                                              
+      328 +- Two `Quantity` values are the same type iff they belong to t
+          +he same dimensional family. `78 kg` and `200 g` are both `Mass
+          +`; `200 g` and `200 kcal` are not the same type.              
+      329 +- Two record values are the same type iff they were built from
+          + the same **kind keyword**. An `exercise` block and a `meal` b
+          +lock are never the same type, even if they had identical field
+          + names (they can't, by grammar). Two `exercise` blocks are alw
+          +ays the same type — the grammar admits exactly one `exercise` 
+          +schema, so the question of "do their fields match" is decided 
+          +in advance by the parser.                                     
+      330 +                                                              
+      331 +This is **name equivalence** (Sebesta §6.14) — Ada and classic
+          +al Pascal use it for record types; we take it for the same rea
+          +son: the kind keyword is the carrier of identity, and two reco
+          +rds with the same shape but different kinds (a future `exercis
+          +e` vs a future `circuit`) should be different types by definit
+          +ion, not by coincidence of field layout. The alternative, stru
+          +ctural equivalence (Sebesta §6.14 — ML, Modula-3, Go interface
+          +s, TypeScript), buys flexibility FitLang has no use for: the g
+          +rammar already pins each kind to one schema, so structural and
+          + name equivalence agree on every program FitLang can parse. We
+          + pick name equivalence because it gives a one-sentence rule (*
+          +"same kind ⇒ same type, different kind ⇒ different type"*) and
+          + because it scales cleanly if a later version adds a second ex
+          +ercise-like kind without forcing it to interoperate with the o
+          +riginal.                                                      
+      332 +                                                              
+      333 +E2 (the AI-vs-human equivalence experiment in D4) revisits thi
+          +s decision against Sebesta §6.14 directly.                    
+      334 +                                                              
+      335 +### 4.5.4 Dimensional families and within-family coercion     
+      336 +                                                              
+      337 +Quantities live in three disjoint **dimensional families** (Ma
+          +ss, Energy, Time — §4.2.6). The type checker rules:           
+      338 +                                                              
+      339 +1. **Within a family, units coerce to the canonical unit at th
+          +e value level.** `78 kg` and `200 g` are both `Mass`; the chec
+          +ker treats them as equal-typed and the interpreter (§4.4) cano
+          +nicalizes both to grams before any arithmetic. `78 kg + 200 g`
+          + is a legal `Mass` value (= 78 200 g); `1 lb + 1 kg` is a lega
+          +l `Mass` value (≈ 1453.6 g). This is the F#/Frink approach to 
+          +dimensional values and the rule Ada `with Unchecked_Conversion
+          +` lets you opt out of (Sebesta §6.5).                         
+      340 +2. **Across families, every operation is a static type error.*
+          +* `80 kg + 200 kcal` does not type-check. `80 kg * 2 kg` does 
+          +not type-check (same-family multiplication would produce `Mass
+          +²`, which has no inhabitant in FitLang's universe — see §4.5.5
+          +). `80 kg / 80 kg` does not type-check either (would produce d
+          +imensionless `Number`, again outside the universe). These are 
+          +*deliberate omissions*, not oversights: the domain has no use 
+          +for square-mass or dimensionless ratios, and admitting them wo
+          +uld force the universe open.                                  
+      341 +3. **Scalar × quantity is legal and yields a quantity of the s
+          +ame family.** `2 * 80 kg` is `Mass` (= 160 kg). This is the on
+          +ly multiplication form the checker accepts.                   
+      342 +4. **Quantity / scalar is legal and yields a quantity of the s
+          +ame family.** `160 kg / 2` is `Mass` (= 80 kg).               
+      343 +                                                              
+      344 +Rules 3 and 4 are the operations a lifter actually writes ("ha
+          +lf my top set," "double the working weight"); rules 1 and 2 ar
+          +e what makes the universe closed under the operations rule 3 a
+          +nd 4 admit.                                                   
+      345 +                                                              
+      346 +### 4.5.5 Rates and rate cancellation                         
+      347 +                                                              
+      348 +A `<rate>` literal `NUM_LIT UNIT₁ "/" UNIT₂` has type `Rate(fa
+          +mily(UNIT₁), family(UNIT₂))`. So `2.5 kg/week` is `Rate(Mass, 
+          +Time)`; `0.25 kg/day` is also `Rate(Mass, Time)` and is treate
+          +d as equal-typed to `2.5 kg/week` after canonicalization to `g
+          +/s`.                                                          
+      349 +                                                              
+      350 +One arithmetic form involving rates is admitted:              
+      351 +                                                              
+      352 +- **Rate × Time → Quantity.** `2.5 kg/week * 4 week` is `Mass`
+          + (= 10 kg). This is the rule §4.4's `progress` and `goal lose 
+          +/ gain` semantics rely on to project a base value forward over
+          + a horizon. Mathematically it is dimensional cancellation; in 
+          +the checker it is a single rule keyed on the operator `*` betw
+          +een an operand of type `Rate(D, Time)` and an operand of type 
+          +`Quantity Time`. The symmetric form `Time × Rate` is also admi
+          +tted.                                                         
+      353 +                                                              
+      354 +No other rate arithmetic is allowed in P1 idiom — no rate + ra
+          +te (it would require asserting same dimensional families on bo
+          +th sides; harmless to add later), no rate / rate (would produc
+          +e a dimensionless `Number` and reopen the universe). This is t
+          +he same minimalism the unit-arithmetic rules in §4.5.4 commit 
+          +to.                                                           
+      355 +                                                              
+      356 +### 4.5.6 Record kinds — name-equivalent, schema-fixed        
+      357 +                                                              
+      358 +The four record kinds — `Exercise`, `Meal`, `Workout`, `Routin
+          +e` — are not anonymous structs. Each is identified by its kind
+          + keyword and has a schema fixed by §4.3:                      
+      359 +                                                              
+      360 +| Kind | Schema (fields → types) | Introduced by | Identity | 
+      361 +|---|---|---|---|                                             
+      362 +| `Exercise` | `sets: Number, reps: Number, weight: Mass` | `<
+          +exercise-decl>` | label (`STRING_LIT`), scoped to enclosing wo
+          +rkout/routine |                                               
+      363 +| `Meal` | one or more of `protein: Mass, carbs: Mass, fat: Ma
+          +ss` | `<meal-decl>` | label, scoped to athlete |              
+      364 +| `Workout` | list of `Exercise` or `<routine-call>` results, 
+          +optional `progress` rate | `<workout-decl>` | label, scoped to
+          + athlete |                                                    
+      365 +| `Routine` | parameter list `(IDENT: UNIT, ...)` + body of `E
+          +xercise`s | `<routine-decl>` | label, scoped to athlete |     
+      366 +                                                              
+      367 +Because the schema is part of the grammar, the type checker ha
+          +s no "missing field" or "extra field" case to report — those a
+          +re syntax errors that never reach it. Its record-kind responsi
+          +bilities reduce to: (a) every numeric/quantity slot has the ri
+          +ght type after evaluating its expression (`weight: <quantity-t
+          +yped expr>` etc.), and (b) every `<routine-call>` matches the 
+          +declared routine's arity and per-parameter family (`UNIT` anno
+          +tation in `<routine-params>` fixes the family of each argument
+          +'s expected `Quantity` type).                                 
+      368 +                                                              
+      369 +This is the same "structured types pin their identity to a nam
+          +e and their shape to a declaration" approach Pascal and Ada ta
+          +ke for records (Sebesta §6.7); FitLang earns simplicity here b
+          +y *not letting users introduce new record kinds*, so the table
+          + above is exhaustive and the checker can hard-code one rule pe
+          +r kind.                                                       
+      370 +                                                              
+      371 +### 4.5.7 `let` bindings — what is nameable as a value        
+      372 +                                                              
+      373 +`<let-decl>` introduces a new `IDENT` and binds it to the valu
+          +e of its RHS expression. The admissible RHS types are exactly 
+          +the three categories the type checker tracks:                 
+      374 +                                                              
+      375 +- `Number` — `let proteinPerKg = 1.8`                         
+      376 +- `Quantity D` for any family D — `let workingWeight = 80 kg`,
+          + `let dailyKcal = 2800 kcal`                                  
+      377 +- `Rate(D₁, D₂)` — `let bulkRate = 0.25 kg/week`              
+      378 +                                                              
+      379 +Record kinds (`Exercise`, `Meal`, `Workout`, `Routine`) are **
+          +not** let-bindable. The domain already gives them names — exer
+          +cises and meals and workouts and routines each get a `STRING_L
+          +IT` label at their declaration — so a `let bench = exercise ".
+          +.." { ... }` would introduce a second name space competing wit
+          +h the label space of §4.6.1 for no payoff. Reusable parameteri
+          +zed exercise groups go through `routine` / `use`, not through 
+          +`let`. This is Sebesta §5.8 *named constants* taken at its nar
+          +rowest reasonable reading: name what is a value (`Number`, `Qu
+          +antity`, `Rate` — things you do arithmetic on), do not name wh
+          +at is already a labelled declaration.                         
+      380 +                                                              
+      381 +Each let-bound name's type is inferred from its RHS at binding
+          + time — there is no surface annotation. Inference is trivial b
+          +ecause the three categories are syntactically distinguishable 
+          +(`NUM_LIT` alone → `Number`; `NUM_LIT UNIT` → `Quantity (famil
+          +y UNIT)`; `NUM_LIT UNIT "/" UNIT` → `Rate(family, family)`; an
+          + `IDENT` reference takes its referent's type from the environm
+          +ent).                                                         
+      382 +                                                              
+      383 +### 4.5.8 Type-checking algorithm (informative)               
+      384 +                                                              
+      385 +The checker is a single bottom-up pass over the AST keyed on n
+          +ode kind, producing for each `<expression>` node a type in `{ 
+          +Number, Quantity D, Rate(D₁, D₂) }` and for each declaration n
+          +ode either a unit type "well-typed" or a typed diagnostic. Pse
+          +udocode for the expression core (the only nontrivial part — ev
+          +ery other rule is a single shape check on a fixed schema):    
+      386 +                                                              
+      387 +```                                                           
+      388 +check(NUM_LIT n)              = Number                        
+      389 +check(QUANTITY n u)           = Quantity (family u)           
+      390 +check(RATE n u1 u2)           = Rate(family u1, family u2)    
+      391 +check(IDENT x)                = env(x)                      //
+          + single env, single pass                                      
+      392 +check(e1 "+" e2)                                              
+      393 +  | check(e1) = check(e2)     = check(e1)                   //
+          + same scalar OR same family                                   
+      394 +  | otherwise                 = error "cannot add T1 and T2"  
+      395 +check(e1 "-" e2)              = same as "+"                   
+      396 +check(e1 "*" e2)                                              
+      397 +  | (Number, Quantity D)      = Quantity D                  //
+          + rule 4.5.4(3)                                                
+      398 +  | (Quantity D, Number)      = Quantity D                    
+      399 +  | (Number, Number)          = Number                        
+      400 +  | (Rate(D, Time), Quantity Time) = Quantity D             //
+          + rule 4.5.5                                                   
+      401 +  | (Quantity Time, Rate(D, Time)) = Quantity D               
+      402 +  | otherwise                 = error                         
+      403 +check(e1 "/" e2)              // only outside <rate> context  
+      404 +  | (Quantity D, Number)      = Quantity D                  //
+          + rule 4.5.4(4)                                                
+      405 +  | (Number, Number)          = Number                        
+      406 +  | otherwise                 = error                         
+      407 +```                                                           
+      408 +                                                              
+      409 +The environment is the flat chain of `let`-bindings establishe
+          +d by §4.6.3 — no scoping stack, no shadowing. E3 (D4) re-imple
+          +ments this checker via AI prompt and tests against ≥3 known-an
+          +swer inputs.                                                  
+      410 +                                                              
+      411  ---
+      412  
+      413  ## 4.6 Names, Binding, Scope, Lifetime **[P1]**
+
+● §4.5 drafted. Quick map of what's in it:
+
+  - 4.5.1 closed type universe (Number / Quantity / Rate / Mode / Label / Record
+   kind)
+  - 4.5.2 strong typing stance (Sebesta §6.12; Java-vs-C trade)
+  - 4.5.3 name equivalence with the one-sentence defense and why structural
+  would be no-op here
+  - 4.5.4 within-family coercion; cross-family is an error; scalar×quantity and
+  quantity/scalar are the only multiplicative forms
+  - 4.5.5 Rate × Time → Quantity (the rule progress / goal lose/gain need)
+  - 4.5.6 the four record kinds and their fixed schemas
+  - 4.5.7 let binds Number, Quantity, Rate only — explicitly not records
+  - 4.5.8 informative pseudocode for the checker (this is what E3 will test
+  against)
+
+  A couple of small design calls I baked in that are worth confirming before I
+  move to §4.4:
+
+  1. Same-family multiplication and division are static errors (kg*kg, kg/kg).
+  This keeps the universe closed but means you can't write bodyweight * 1.8 to
+  get protein grams — you'd need 1.8 g * (bodyweight / 1 kg) … which we also
+  disallow. The clean way to express "protein per kg of bodyweight" is the
+  existing target protein >= 1.8 g per kg of bodyweight form, which is sugar
+  handled by §4.4 semantics, not a generic arithmetic expression. OK?
+  2. Mode types are not nameable (no let mode = bulk). Modes appear only in
+  fixed grammar positions. Sound?
+
+  Say if either should flex, otherwise I'll move on to §4.4 (semantics — what
+  progress, goal lose/gain, plan week, and when actually compute).
+
+✻ Churned for 1m 42s
+
+❯ fine                                                                          
+
+● Drafting §4.4 now — I'll specify operational semantics (big-step), define what
+   the interpreter outputs, and pin down progress / goal / plan week / target /
+  when / use.
+
+● Update(docs\design\D1.md)
+  ⎿  Added 183 lines, removed 1 line
+      294  
+      295  ## 4.4 Semantics **[P2]**
+      296  
+      297 -*Operational semantics for `train ... until <predicate>:` and 
+          -`progress` — added for Part 2 submission.*                    
+      297 +### 4.4.1 Style and meta-language                             
+      298  
+      299 +The semantics is given **operationally** in big-step (natural-
+          +semantics) style — the form Sebesta surveys in §3.5.1 and cred
+          +its to Plotkin/Kahn. A FitLang program denotes a value of type
+          + `WeeklyPlan` (defined in §4.4.2); each evaluation rule has th
+          +e shape `env ⊢ node ⇓ value`, read "in environment *env*, AST 
+          +node *node* evaluates to *value*." We pick operational over de
+          +notational (§3.5.2) and axiomatic (§3.5.3) for the same reason
+          + every Sebesta-style intro DSL does: it maps directly onto the
+          + tree-walking interpreter in D2 and is the form the user can d
+          +efend in the quiz without a domain-theory aside.              
+      300 +                                                              
+      301 +A FitLang program is **pure, declarative, and one-shot**: no i
+          +nput, no I/O during evaluation, no mutation, no nondeterminism
+          +. Evaluation order is fixed by the grammar (top-down, left-to-
+          +right over the children of each node) but the order is observa
+          +tionally irrelevant — by §4.6.6 immutability, two visit orders
+          + that respect the no-forward-reference rule of §4.6.3 produce 
+          +the same `WeeklyPlan`.                                        
+      302 +                                                              
+      303 +### 4.4.2 Program meaning — the `WeeklyPlan` value            
+      304 +                                                              
+      305 +The denotation of any well-typed FitLang program is a single `
+          +WeeklyPlan` record:                                           
+      306 +                                                              
+      307 +```                                                           
+      308 +WeeklyPlan = {                                                
+      309 +    athlete  : { bodyweight : Mass, goal : GoalMode },        
+      310 +    workouts : [ EvaluatedWorkout ],            // in declarat
+          +ion order, filtered by schedule                               
+      311 +    meals    : [ EvaluatedMeal ],               // in declarat
+          +ion order, filtered by schedule                               
+      312 +    targets  : [ TargetReport ],                // one per <ta
+          +rget-decl> in scope                                           
+      313 +    goalRate : Maybe Rate(Mass, Time)           // from <goal-
+          +rate-decl>, if any                                            
+      314 +}                                                             
+      315 +                                                              
+      316 +EvaluatedWorkout = {                                          
+      317 +    label    : String,                                        
+      318 +    exercises: [ { label, sets, reps, weight : Mass, nextWeekW
+          +eight : Maybe Mass } ]                                        
+      319 +}                                                             
+      320 +                                                              
+      321 +EvaluatedMeal     = { label : String, protein : Mass, carbs : 
+          +Mass, fat : Mass, kcal : Energy }                             
+      322 +TargetReport      = { macro : MacroName, op : RelOp, threshold
+          + : Mass, planned : Mass, passes : Bool }                      
+      323 +```                                                           
+      324 +                                                              
+      325 +The interpreter prints this record as a structured text report
+          + (D3's "executed output" deliverable). Nothing else is observa
+          +ble — no side effects, no random state — which is why §4.4.1's
+          + two-paragraph "operational, pure, one-shot" framing is enough
+          + to characterise meaning.                                     
+      326 +                                                              
+      327 +### 4.4.3 Atomic forms                                        
+      328 +                                                              
+      329 +```                                                           
+      330 +env ⊢ NUM_LIT n            ⇓ n  : Number                      
+      331 +env ⊢ NUM_LIT n  UNIT u    ⇓ canonicalize(n, u)  : Quantity (f
+          +amily u)                                                      
+      332 +env ⊢ NUM_LIT n  UNIT u₁ "/" UNIT u₂                          
+      333 +                            ⇓ canonicalize(n, u₁) / canonicali
+          +ze(1, u₂)  : Rate(family u₁, family u₂)                       
+      334 +env ⊢ IDENT x              ⇓ env(x)                           
+      335 +```                                                           
+      336 +                                                              
+      337 +`canonicalize(n, u)` rescales `n` to the canonical unit of `fa
+          +mily u` per §4.5.4 — `78 kg` becomes `78000 g`, `200 kcal` sta
+          +ys `200 kcal`, `1 week` becomes `604800 s`. All later arithmet
+          +ic in the interpreter is on canonicalized values; the printer 
+          +reinflates to the surface unit a human would read (kg, kcal, w
+          +eek).                                                         
+      338 +                                                              
+      339 +### 4.4.4 Expressions                                         
+      340 +                                                              
+      341 +The expression rules mirror §4.5.8 and add the value-level ope
+          +ration:                                                       
+      342 +                                                              
+      343 +```                                                           
+      344 +env ⊢ e₁ ⇓ v₁    env ⊢ e₂ ⇓ v₂    v₁ ⊕ v₂ defined per §4.5    
+      345 +————————————————————————————————————————————————————————————  
+      346 +env ⊢ e₁ "⊕" e₂  ⇓ v₁ ⊕ v₂                                    
+      347 +```                                                           
+      348 +                                                              
+      349 +The `defined per §4.5` premise is discharged statically by the
+          + type checker; at run time the interpreter never encounters an
+          + undefined arithmetic case, so there is no need for a run-time
+          + "operands must agree" guard. Unit canonicalization makes `+` 
+          +and `-` ordinary arithmetic on canonicalized numbers, `*` and 
+          +`/` ordinary scalar arithmetic (§4.5.4 rules 3–4) and `Rate × 
+          +Time → Quantity` an ordinary multiply followed by a family rel
+          +abel (§4.5.5).                                                
+      350 +                                                              
+      351 +### 4.4.5 Declarations and the environment                    
+      352 +                                                              
+      353 +A single linear pass over the body of `<athlete-block>` thread
+          +s an environment of let-bindings:                             
+      354 +                                                              
+      355 +```                                                           
+      356 +            env ⊢ e ⇓ v                                       
+      357 +————————————————————————————————    (LET)                     
+      358 +env ⊢ "let" IDENT x "=" e   ⇝   env ∪ { x ↦ v }               
+      359 +```                                                           
+      360 +                                                              
+      361 +`⇝` is the "extends-environment" relation — `<let-decl>`s are 
+          +not values, they are *bindings*. By §4.6.3 no-shadowing rule, 
+          +`x ∉ dom(env)` is required; the type checker has already ensur
+          +ed this, so the rule is unconditional at run time.            
+      362 +                                                              
+      363 +`<exercise-decl>`, `<meal-decl>`, `<workout-decl>`, `<routine-
+          +decl>` are declarations whose effect is to add an entry to the
+          + appropriate label space (workout / exercise / meal / routine)
+          +. They do not contribute to the let-environment.              
+      364 +                                                              
+      365 +### 4.4.6 Workouts and exercises                              
+      366 +                                                              
+      367 +A `<workout-decl>` evaluates its body to an `EvaluatedWorkout`
+          +. Each `<workout-item>` is either an inline `<exercise-decl>` 
+          +or a `<routine-call>`; both yield a list of exercise records. 
+      368 +                                                              
+      369 +```                                                           
+      370 +env ⊢ q ⇓ w : Mass                                    // weigh
+          +t expression                                                  
+      371 +————————————————————————————————————————————————————   (EXERCI
+          +SE)                                                           
+      372 +env ⊢ exercise L { sets: s, reps: r, weight: q }              
+      373 +              ⇓ { label=L, sets=s, reps=r, weight=w, nextWeekW
+          +eight=⊥ }                                                     
+      374 +```                                                           
+      375 +                                                              
+      376 +A `<progress-stmt>` inside a workout is *not* a separate outpu
+          +t — it attaches `nextWeekWeight = weight + 1 week × rate` to e
+          +very exercise in the same workout. This is the single operatio
+          +nal use of the `Rate × Time → Quantity` rule of §4.5.5:       
+      377 +                                                              
+      378 +```                                                           
+      379 +env ⊢ "progress" "weight" <rate> ⇓ r : Rate(Mass, Time)       
+      380 +————————————————————————————————————————————————————   (PROGRE
+          +SS)                                                           
+      381 +for each exercise e in the enclosing workout:                 
+      382 +    e.nextWeekWeight  :=  e.weight + r × (1 week)             
+      383 +```                                                           
+      384 +                                                              
+      385 +The choice to project exactly **one week forward** (rather tha
+          +n emit a list of N weeks) follows from `plan week` being the u
+          +nit of output — §4.4.8. A multi-week extension would change th
+          +e projection horizon and nothing else.                        
+      386 +                                                              
+      387 +### 4.4.7 Routines and routine calls                          
+      388 +                                                              
+      389 +A `<routine-decl>` `routine "R" (p₁: u₁, …, pₙ: uₙ) { body }` 
+          +is recorded in the routine label space as a thunk of `(params,
+          + body)`. It is not evaluated until used.                      
+      390 +                                                              
+      391 +```                                                           
+      392 +env ⊢ a₁ ⇓ v₁ : Quantity (family u₁)    ...    env ⊢ aₙ ⇓ vₙ :
+          + Quantity (family uₙ)                                         
+      393 +env' = env ∪ { p₁ ↦ v₁, ..., pₙ ↦ vₙ }                        
+      394 +env' ⊢ body  ⇓  [ EvaluatedExercise, ... ]                    
+      395 +——————————————————————————————————————————————————————————————
+          +——————   (USE)                                                
+      396 +env ⊢ use "R" (a₁, ..., aₙ)   ⇓   [ EvaluatedExercise, ... ]  
+      397 +```                                                           
+      398 +                                                              
+      399 +Argument types are checked statically against the routine's `U
+          +NIT`-annotated parameter declarations. The routine's body is e
+          +valuated in a *fresh* environment that extends `env` only with
+          + the parameter bindings — routine bodies cannot see the caller
+          +'s `let`-bindings, only the athlete-scope ones present at the 
+          +routine's *declaration* site. This is static (lexical) scoping
+          + in Sebesta §5.5.1 form, applied to a parameterized declarativ
+          +e template.                                                   
+      400 +                                                              
+      401 +### 4.4.8 The `plan week` schedule                            
+      402 +                                                              
+      403 +`<schedule-stmt>` is the single output-producing construct. It
+          + selects from the declared workouts and meals by label and ass
+          +embles the `WeeklyPlan`:                                      
+      404 +                                                              
+      405 +```                                                           
+      406 +labels_w = [ L₁, L₂, ... ]    labels_m = [ M₁, M₂, ... ]      
+      407 +W = [ evalWorkout(Lᵢ) for Lᵢ in labels_w if Lᵢ declared ]     
+      408 +M = [ evalMeal(Mⱼ)    for Mⱼ in labels_m if Mⱼ declared ]     
+      409 +T = [ evalTarget(t, M, env) for t in targets_in_scope ]       
+      410 +G = the rate from the unique <goal-rate-decl>, or ⊥           
+      411 +————————————————————————————————————————————————————————————  
+          + (PLAN)                                                       
+      412 +env ⊢ plan week with workouts: labels_w, meals: labels_m      
+      413 +                ⇓ WeeklyPlan { athlete, workouts=W, meals=M, t
+          +argets=T, goalRate=G }                                        
+      414 +```                                                           
+      415 +                                                              
+      416 +"declared" is decided at parse time (§4.6.3 forward-reference 
+          +rule); a label in the schedule that names no declaration is a 
+          +static error, not a run-time one. The list order in the plan f
+          +ollows the **schedule order** (the order the user wrote them i
+          +n `[ ... ]`), not the declaration order — this gives the lifte
+          +r direct control over Monday-through-Sunday ordering without i
+          +ntroducing a separate day construct.                          
+      417 +                                                              
+      418 +### 4.4.9 Targets and macro arithmetic                        
+      419 +                                                              
+      420 +A `<target-decl>` is evaluated against the meals scheduled by 
+          +`plan week` (not against every declared meal):                
+      421 +                                                              
+      422 +```                                                           
+      423 +env ⊢ q ⇓ t : Mass                                            
+      424 +planned = Σ { meal.<macro> | meal ∈ scheduled meals }         
+      425 +————————————————————————————————————————————————————   (TARGET
+          +, absolute form)                                              
+      426 +env ⊢ target <macro> <op> q                                   
+      427 +            ⇓ TargetReport { macro, op, threshold=t, planned, 
+          +passes=(planned <op> t) }                                     
+      428 +```                                                           
+      429 +                                                              
+      430 +The "per kg of bodyweight" form rescales the threshold using t
+          +he athlete's bodyweight:                                      
+      431 +                                                              
+      432 +```                                                           
+      433 +env ⊢ q ⇓ t : Mass    bw = env.bodyweight in kg               
+      434 +————————————————————————————————————————————————————   (TARGET
+          +, per-bw form)                                                
+      435 +env ⊢ target <macro> <op> q per kg of bodyweight              
+      436 +            ⇓ TargetReport { macro, op, threshold = t × bw, pl
+          +anned, passes }                                               
+      437 +```                                                           
+      438 +                                                              
+      439 +The "× bw" here is the one place the language uses *quantity s
+          +caled by a scalar drawn from a quantity's numeric value* — §4.
+          +5.4 forbids `Mass × Mass`, but the `per UNIT of bodyweight` fo
+          +rm is sugar for "treat the bodyweight value in the named unit 
+          +as a dimensionless multiplier." This is the same trick Ada `'P
+          +os` does for enumerations (Sebesta §6.4) — a privileged projec
+          +tion from a typed value to a number, available only in the nam
+          +ed sugar form, never as a general expression operator.        
+      440 +                                                              
+      441 +`<goal-rate-decl>` is stored on the plan but does not drive an
+          +y computation in P2 — it is reported as `goalRate` in the outp
+          +ut and consistency-checked against the header `goal` mode (`bu
+          +lk` with `lose` is rejected) by the type checker, not by the s
+          +emantics.                                                     
+      442 +                                                              
+      443 +### 4.4.10 The `when` control structure                       
+      444 +                                                              
+      445 +`<when-decl>` is **decided at compile time** — the dispatch va
+          +lue is the goal mode bound in `<athlete-params>`, which is a l
+          +iteral in the header (§4.3.3 rule 3). A pre-semantic pass elim
+          +inates the dead branch:                                       
+      446 +                                                              
+      447 +```                                                           
+      448 +goal-mode in env  =  M                                        
+      449 +————————————————————————————————   (WHEN-then)                
+      450 +env ⊢ when goal: M { rules₁ } else { rules₂ }   ↦   rules₁    
+      451 +                                                              
+      452 +goal-mode in env  ≠  M                                        
+      453 +————————————————————————————————   (WHEN-else)                
+      454 +env ⊢ when goal: M { rules₁ } else { rules₂ }   ↦   rules₂   (
+          +or ∅ if no else)                                              
+      455 +```                                                           
+      456 +                                                              
+      457 +The surviving rule list is spliced into the enclosing `<rules-
+          +section>` and evaluated by the rules above. This is Sebesta §8
+          +.1's *static if* — an alternative chosen at compile time — and
+          + is the reason `when` is in the language at all: it lets the u
+          +ser write goal-mode-specific intake or targets without paying 
+          +any run-time dispatch cost.                                   
+      458 +                                                              
+      459 +### 4.4.11 Program rule and worked example                    
+      460 +                                                              
+      461 +```                                                           
+      462 +env₀ = ∅                                                      
+      463 +env₁ = env₀ ∪ { bodyweight ↦ ..., goal ↦ ... }    // from <ath
+          +lete-params>                                                  
+      464 +env₂ = thread <let-decl>s through env₁              // §4.4.5 
+      465 +WeeklyPlan = evaluate <schedule-stmt> in env₂       // §4.4.8 
+      466 +————————————————————————————————————————————————   (PROGRAM)  
+      467 +⊢ <athlete-block>  ⇓  WeeklyPlan                              
+      468 +```                                                           
+      469 +                                                              
+      470 +For the §4.1 sample program (bodyweight 78 kg, goal bulk, one 
+          +`"Push Day"` workout with bench/OHP and `progress weight 2.5 k
+          +g/week`, one `"Breakfast"` meal at 40/80/15, `target protein >
+          += 1.8 g per kg of bodyweight`, `goal lose 0.5 kg/week` — note:
+          + the sample has a `bulk` header with a `lose` goal rate, which
+          + §4.5 flags as a type error and the interpreter never runs):  
+      471 +                                                              
+      472 +1. (LET) — none in this program; environment after step is `{ 
+          +bodyweight ↦ 78 kg, goal ↦ bulk }`.                           
+      473 +2. (EXERCISE) for "Bench Press" → `{ ..., weight = 80 kg, next
+          +WeekWeight = ⊥ }`; similarly for "Overhead Press".            
+      474 +3. (PROGRESS) attaches `nextWeekWeight = weight + 2.5 kg` to b
+          +oth exercises in "Push Day".                                  
+      475 +4. (PLAN) schedule picks the `"Push Day"` workout and `"Breakf
+          +ast"` meal.                                                   
+      476 +5. (TARGET, per-bw form) `threshold = 1.8 g × 78 = 140.4 g`; `
+          +planned = 40 g`; `passes = false`.                            
+      477 +6. Output `WeeklyPlan` is printed.                            
+      478 +                                                              
+      479 +D3's three valid programs each include their final printed `We
+          +eklyPlan` as the "executed output" the handout asks for.      
+      480 +                                                              
+      481  ---
+      482  
+      483  ## 4.5 Type System **[P2]**
+● §4.4 drafted. Design calls baked in — flag any you want to change:
+
+  1. Program output is one WeeklyPlan record (printed as text). No multi-week
+  projection — progress just attaches nextWeekWeight per exercise. A multi-week
+  extension would change only the projection horizon.
+  2. goal lose/gain X kg/week is reported but not computed against — no
+  calorie-balance arithmetic. It's consistency-checked against the header goal
+  mode (a bulk header + lose rate is a type error). Keeps the semantics small
+  and avoids baking in a magic "1 kg fat ≈ 7700 kcal" constant.
+  3. target runs against scheduled meals only (not every declared meal). So a
+  declared-but-unscheduled meal doesn't count toward macros — matches how a
+  lifter thinks about a real week.
+  4. when is fully static — pre-pass eliminates the dead branch before the
+  semantics rules run. Sebesta §8.1 "static if."
+  5. per kg of bodyweight is a privileged sugar, not a general operator —
+  explained as "treat bodyweight in the named unit as a scalar." This is the
+  only carve-out from the §4.5.4 no-Mass × Mass rule. Analogue: Ada 'Pos.
+  6. Routine bodies see the routine's declaration-site env (static scoping), not
+   the caller's. So a routine can't accidentally pick up a local let from a
+  workout. Defensible in one sentence: "routines are lexically scoped at their
+  routine "..." site."
+
+  If all six sit, I'll knock out §4.7 (expressions/assignment) and §4.8 (one
+  paragraph per major decision + trade-off) and that finishes the D1 P2 prose.
+  Then we'd be ready to start D2 (type checker + interpreter).
+
+✻ Brewed for 1m 52s
+
+❯ should we allow long term programs or weekly plans are enough?                
+
+● Good push. Three honest options:
+
+  A — Keep single-week (what's drafted).
+  plan week ... produces one week. progress shows up only as a nextWeekWeight
+  annotation per exercise. goal lose/gain X kg/week is reported but not
+  projected.
+  - Pro: smallest semantics, smallest D3 output, fastest to D2 in the 6 days
+  left.
+  - Con: progress and goal lose/gain barely do work — they exist mostly to
+  demonstrate Rate × Time without using it.
+
+  B — Multi-week with a horizon (recommended).
+  plan N week with ... where N is a NUM_LIT (default 1 if user writes just plan 
+  week). Output becomes [WeeklyPlan_1, ..., WeeklyPlan_N]. In week k each
+  exercise's weight is base + rate × (k−1 week); the projected bodyweight is
+  bodyweight + goalRate × (k−1 week); target ... per kg of bodyweight recomputes
+   per week.
+  - Pro: progress, goal lose/gain, and the Rate × Time → Quantity rule become
+  load-bearing — they're the only way to write a meaningful N-week program. The
+  DSL identity gets stronger ("a FitLang program is a typed training block, not
+  a snapshot"). One-sentence quiz defense: "periodization is the unit of 
+  planning in strength training; a single week is the degenerate case."
+  - Cost: one grammar line (<schedule-stmt> → "plan" [ NUM_LIT ] "week" "with" 
+  ...), one for k in 1..N loop in the interpreter, slightly longer D3 outputs.
+  Maybe 30 minutes of extra interpreter code.
+
+  C — Block of named weeks (overkill).
+  block "Hypertrophy" { week 1 { ... } week 2 { ... } ... } — explicit per-week
+  declarations. Don't do this; it duplicates progress and removes the reason
+  progress exists.
+
+  My recommendation: B. It costs almost nothing and earns back the keywords. The
+   grammar change is minimal:
+
+  <schedule-stmt>    → "plan" [ NUM_LIT ] "week" "with" <schedule-clauses>
+
+  (NUM_LIT here is a positive integer; absence means 1.) Type rule: nothing
+  changes — the projection happens in the interpreter, the type checker still
+  sees one schedule.
+
+  Want B? If yes I'll patch §4.3 (grammar), §4.4 (semantics — replace §4.4.8
+  with the N-week version), and tweak §4.4.6 (PROGRESS becomes per-week instead
+  of one-shot annotation).
+
+✻ Cooked for 30s
+
+❯ let's do B, because a trainee wants multiple week plan                        
+
+● Locking in B. Updating grammar, semantics, and the worked example.
+
+● Update(docs\design\D1.md)
+  ⎿  Added 1 line, removed 1 line
+      223  
+      224  (* — schedule: exactly one, closes the program;
+      225       at least one of workouts / meals must appear — *)
+      226 -<schedule-stmt>    → "plan" "week" "with" <schedule-clauses>  
+      226 +<schedule-stmt>    → "plan" [ NUM_LIT ] "week" "with" <schedul
+          +e-clauses>                                                    
+      227  <schedule-clauses> → "workouts" ":" <name-list> [ "," "meals" 
+           ":" <name-list> ]
+      228                     | "meals"    ":" <name-list>
+      229  <name-list>        → "[" STRING_LIT { "," STRING_LIT } "]"
+
+● Update(docs\design\D1.md)
+  ⎿  Added 10 lines, removed 8 lines
+      467  ⊢ <athlete-block>  ⇓  WeeklyPlan
+      468  ```
+      469  
+      470 -For the §4.1 sample program (bodyweight 78 kg, goal bulk, one 
+          -`"Push Day"` workout with bench/OHP and `progress weight 2.5 k
+          -g/week`, one `"Breakfast"` meal at 40/80/15, `target protein >
+          -= 1.8 g per kg of bodyweight`, `goal lose 0.5 kg/week` — note:
+          - the sample has a `bulk` header with a `lose` goal rate, which
+          - §4.5 flags as a type error and the interpreter never runs):  
+      470 +For a variant of the §4.1 sample (bodyweight 78 kg, goal bulk,
+          + `"Push Day"` with bench at 80 kg and `progress weight 2.5 kg/
+          +week`, `"Breakfast"` at protein 40 g, `target protein >= 1.8 g
+          + per kg of bodyweight`, `goal gain 0.25 kg/week`, scheduled as
+          + `plan 4 week with workouts: ["Push Day"], meals: ["Breakfast"
+          +]`):                                                          
+      471  
+      472 -1. (LET) — none in this program; environment after step is `{ 
+          -bodyweight ↦ 78 kg, goal ↦ bulk }`.                           
+      473 -2. (EXERCISE) for "Bench Press" → `{ ..., weight = 80 kg, next
+          -WeekWeight = ⊥ }`; similarly for "Overhead Press".            
+      474 -3. (PROGRESS) attaches `nextWeekWeight = weight + 2.5 kg` to b
+          -oth exercises in "Push Day".                                  
+      475 -4. (PLAN) schedule picks the `"Push Day"` workout and `"Breakf
+          -ast"` meal.                                                   
+      476 -5. (TARGET, per-bw form) `threshold = 1.8 g × 78 = 140.4 g`; `
+          -planned = 40 g`; `passes = false`.                            
+      477 -6. Output `WeeklyPlan` is printed.                            
+      472 +1. (LET) — none; env after header = `{ bodyweight ↦ 78 kg, goa
+          +l ↦ bulk, goalRate ↦ +0.25 kg/week }`.                        
+      473 +2. (EXERCISE / PROGRESS) — `"Push Day"` records base weights a
+          +nd `progressRate = 2.5 kg/week`.                              
+      474 +3. (PLAN) — N = 4. For each k in 1..4:                        
+      475 +   - `bw_k = 78 kg + 0.25 kg × (k−1)` → 78, 78.25, 78.5, 78.75
+          + kg.                                                          
+      476 +   - Bench `weight_k = 80 kg + 2.5 kg × (k−1)` → 80, 82.5, 85,
+          + 87.5 kg.                                                     
+      477 +   - `threshold_k = 1.8 g × bw_k_in_kg` → 140.4, 140.85, 141.3
+          +, 141.75 g.                                                   
+      478 +   - `planned_k = 40 g` (constant); `passes_k = false` in ever
+          +y week.                                                       
+      479 +4. The `Plan` printed by the interpreter is a four-week table 
+          +with the trajectory above.                                    
+      480  
+      479 -D3's three valid programs each include their final printed `We
+          -eklyPlan` as the "executed output" the handout asks for.      
+      481 +D3's three valid programs each include their final printed `Pl
+          +an` as the "executed output" the handout asks for; at least on
+          +e of them uses `N > 1` so the per-week projection is exercised
+          +.                                                             
+      482  
+      483  ---
+      484  
+
+● Update(docs\design\D1.md)
+  ⎿  Added 15 lines, removed 10 lines
+      300  
+      301  A FitLang program is **pure, declarative, and one-shot**: no i
+           nput, no I/O during evaluation, no mutation, no nondeterminism
+           . Evaluation order is fixed by the grammar (top-down, left-to-
+           right over the children of each node) but the order is observa
+           tionally irrelevant — by §4.6.6 immutability, two visit orders
+            that respect the no-forward-reference rule of §4.6.3 produce 
+           the same `WeeklyPlan`.
+      302  
+      303 -### 4.4.2 Program meaning — the `WeeklyPlan` value            
+      303 +### 4.4.2 Program meaning — the `Plan` value                  
+      304  
+      305 -The denotation of any well-typed FitLang program is a single `
+          -WeeklyPlan` record:                                           
+      305 +The denotation of any well-typed FitLang program is a single `
+          +Plan` record — an athlete header plus an ordered list of `Week
+          +`s, one per week in the scheduled horizon (§4.4.8):           
+      306  
+      307  ```
+      308 -WeeklyPlan = {                                                
+      309 -    athlete  : { bodyweight : Mass, goal : GoalMode },        
+      310 -    workouts : [ EvaluatedWorkout ],            // in declarat
+          -ion order, filtered by schedule                               
+      311 -    meals    : [ EvaluatedMeal ],               // in declarat
+          -ion order, filtered by schedule                               
+      312 -    targets  : [ TargetReport ],                // one per <ta
+          -rget-decl> in scope                                           
+      313 -    goalRate : Maybe Rate(Mass, Time)           // from <goal-
+          -rate-decl>, if any                                            
+      308 +Plan = {                                                      
+      309 +    athlete  : { bodyweight : Mass, goal : GoalMode, goalRate 
+          +: Maybe Rate(Mass, Time) },                                   
+      310 +    weeks    : [ Week ]                          // length N f
+          +rom <schedule-stmt>, N ≥ 1                                    
+      311  }
+      312  
+      313 +Week = {                                                      
+      314 +    index               : Number,                // 1..N      
+      315 +    projectedBodyweight : Mass,                  // bodyweight
+          + + goalRate × (index − 1 week)                                
+      316 +    workouts            : [ EvaluatedWorkout ],  // schedule o
+          +rder                                                          
+      317 +    meals               : [ EvaluatedMeal ],     // schedule o
+          +rder                                                          
+      318 +    targets             : [ TargetReport ]       // re-evaluat
+          +ed against this week's bodyweight                             
+      319 +}                                                             
+      320 +                                                              
+      321  EvaluatedWorkout = {
+      322      label    : String,
+      318 -    exercises: [ { label, sets, reps, weight : Mass, nextWeekW
+          -eight : Maybe Mass } ]                                        
+      323 +    exercises: [ { label, sets, reps, weight : Mass } ]   // w
+          +eight is per-week, see §4.4.6                                 
+      324  }
+      325  
+      326  EvaluatedMeal     = { label : String, protein : Mass, carbs : 
+           Mass, fat : Mass, kcal : Energy }
+      327  TargetReport      = { macro : MacroName, op : RelOp, threshold
+            : Mass, planned : Mass, passes : Bool }
+      328  ```
+      329  
+      325 -The interpreter prints this record as a structured text report
+          - (D3's "executed output" deliverable). Nothing else is observa
+          -ble — no side effects, no random state — which is why §4.4.1's
+          - two-paragraph "operational, pure, one-shot" framing is enough
+          - to characterise meaning.                                     
+      330 +A program with `plan week ...` (no integer) degenerates to `N 
+          += 1` and a single-element `weeks` list — the "snapshot" readin
+          +g. A program with `plan 8 week ...` produces an 8-week trainin
+          +g block where each week's bodyweight, exercise weights, and ta
+          +rget thresholds are recomputed under the rates declared in the
+          + program. Nothing else is observable — no side effects, no ran
+          +dom state — which is why §4.4.1's "operational, pure, one-shot
+          +" framing is enough to characterise meaning.                  
+      331  
+      332  ### 4.4.3 Atomic forms
+      333  
+
+● Update(docs\design\D1.md)
+  ⎿  Added 7 lines, removed 14 lines
+      369  
+      370  ### 4.4.6 Workouts and exercises
+      371  
+      372 -A `<workout-decl>` evaluates its body to an `EvaluatedWorkout`
+          -. Each `<workout-item>` is either an inline `<exercise-decl>` 
+          -or a `<routine-call>`; both yield a list of exercise records. 
+      372 +A `<workout-decl>` is evaluated **once per week** in the sched
+          +uled horizon — the same declaration yields a different `Evalua
+          +tedWorkout` in week 1 vs week 4 because `<progress-stmt>` inje
+          +cts a per-week offset into each exercise's weight. Without a `
+          +<progress-stmt>` the weekly evaluations are identical and the 
+          +per-week duplication is observationally a no-op.              
+      373  
+      374  ```
+      375 -env ⊢ q ⇓ w : Mass                                    // weigh
+          -t expression                                                  
+      376 -————————————————————————————————————————————————————   (EXERCI
+          -SE)                                                           
+      377 -env ⊢ exercise L { sets: s, reps: r, weight: q }              
+      378 -              ⇓ { label=L, sets=s, reps=r, weight=w, nextWeekW
+          -eight=⊥ }                                                     
+      375 +env ⊢ q ⇓ w₀ : Mass    progressRate(workout) = r : Rate(Mass, 
+          +Time) ∪ { ⊥ }                                                 
+      376 +——————————————————————————————————————————————————————————————
+          +——————   (EXERCISE @ week k)                                  
+      377 +env ⊢ exercise L { sets: s, reps: r_s, weight: q }            
+      378 +              ⇓_k  { label=L, sets=s, reps=r_s, weight = w₀ + 
+          +r × ((k − 1) week) }                                          
+      379  ```
+      380  
+      381 -A `<progress-stmt>` inside a workout is *not* a separate outpu
+          -t — it attaches `nextWeekWeight = weight + 1 week × rate` to e
+          -very exercise in the same workout. This is the single operatio
+          -nal use of the `Rate × Time → Quantity` rule of §4.5.5:       
+      381 +where `r × ((k−1) week)` is `0 kg` when `r = ⊥` (no `<progress
+          +-stmt>` in the enclosing workout) or when `k = 1`. This is the
+          + operational use of the `Rate × Time → Quantity` rule of §4.5.
+          +5.                                                            
+      382  
+      383 -```                                                           
+      384 -env ⊢ "progress" "weight" <rate> ⇓ r : Rate(Mass, Time)       
+      385 -————————————————————————————————————————————————————   (PROGRE
+          -SS)                                                           
+      386 -for each exercise e in the enclosing workout:                 
+      387 -    e.nextWeekWeight  :=  e.weight + r × (1 week)             
+      388 -```                                                           
+      383 +A `<progress-stmt>` is not itself a value — its sole effect is
+          + to bind `progressRate(workout)` for the rule above. The rate 
+          +is shared across every exercise in the same workout (one `<pro
+          +gress-stmt>` per `<workout-decl>` by §4.3); a workout without 
+          +one has every week identical.                                 
+      384  
+      390 -The choice to project exactly **one week forward** (rather tha
+          -n emit a list of N weeks) follows from `plan week` being the u
+          -nit of output — §4.4.8. A multi-week extension would change th
+          -e projection horizon and nothing else.                        
+      391 -                                                              
+      385  ### 4.4.7 Routines and routine calls
+      386  
+      387  A `<routine-decl>` `routine "R" (p₁: u₁, …, pₙ: uₙ) { body }` 
+           is recorded in the routine label space as a thunk of `(params,
+            body)`. It is not evaluated until used.
+
+● Update(docs\design\D1.md)
+  ⎿  Added 18 lines, removed 10 lines
+      396  
+      397  Argument types are checked statically against the routine's `U
+           NIT`-annotated parameter declarations. The routine's body is e
+           valuated in a *fresh* environment that extends `env` only with
+            the parameter bindings — routine bodies cannot see the caller
+           's `let`-bindings, only the athlete-scope ones present at the 
+           routine's *declaration* site. This is static (lexical) scoping
+            in Sebesta §5.5.1 form, applied to a parameterized declarativ
+           e template.
+      398  
+      399 -### 4.4.8 The `plan week` schedule                            
+      399 +### 4.4.8 The `plan N week` schedule                          
+      400  
+      401 -`<schedule-stmt>` is the single output-producing construct. It
+          - selects from the declared workouts and meals by label and ass
+          -embles the `WeeklyPlan`:                                      
+      401 +`<schedule-stmt>` is the single output-producing construct. It
+          + picks a horizon `N ≥ 1` (default 1 when the optional `NUM_LIT
+          +` is omitted), selects from the declared workouts and meals by
+          + label, and assembles one `Week` per index — each week re-eval
+          +uating workouts under their progression rates and targets unde
+          +r the projected bodyweight.                                   
+      402  
+      403  ```
+      404 +N        = NUM_LIT in <schedule-stmt>, or 1 if absent         
+      405  labels_w = [ L₁, L₂, ... ]    labels_m = [ M₁, M₂, ... ]
+      405 -W = [ evalWorkout(Lᵢ) for Lᵢ in labels_w if Lᵢ declared ]     
+      406 -M = [ evalMeal(Mⱼ)    for Mⱼ in labels_m if Mⱼ declared ]     
+      407 -T = [ evalTarget(t, M, env) for t in targets_in_scope ]       
+      408 -G = the rate from the unique <goal-rate-decl>, or ⊥           
+      409 -————————————————————————————————————————————————————————————  
+          - (PLAN)                                                       
+      410 -env ⊢ plan week with workouts: labels_w, meals: labels_m      
+      411 -                ⇓ WeeklyPlan { athlete, workouts=W, meals=M, t
+          -argets=T, goalRate=G }                                        
+      406 +G        = the rate from the unique <goal-rate-decl>, or ⊥    
+      407 +bw₀      = env.bodyweight                                     
+      408 +                                                              
+      409 +  for each k ∈ 1..N:                                          
+      410 +      bw_k = bw₀ + G × ((k − 1) week)                        /
+          +/ bw₀ if G = ⊥                                                
+      411 +      W_k  = [ evalWorkout(Lᵢ) at week k        for Lᵢ in labe
+          +ls_w ]   // §4.4.6                                            
+      412 +      M_k  = [ evalMeal(Mⱼ)                      for Mⱼ in lab
+          +els_m ]   // meals constant across weeks                      
+      413 +      T_k  = [ evalTarget(t, M_k, bw_k)          for t in targ
+          +ets_in_scope ]   // §4.4.9                                    
+      414 +      Week_k = { index=k, projectedBodyweight=bw_k, workouts=W
+          +_k, meals=M_k, targets=T_k }                                  
+      415 +——————————————————————————————————————————————————————————————
+          +——————————   (PLAN)                                           
+      416 +env ⊢ plan [N] week with workouts: labels_w, meals: labels_m  
+      417 +        ⇓ Plan { athlete = { bodyweight=bw₀, goal, goalRate=G 
+          +}, weeks = [Week_1, ..., Week_N] }                            
+      418  ```
+      419  
+      414 -"declared" is decided at parse time (§4.6.3 forward-reference 
+          -rule); a label in the schedule that names no declaration is a 
+          -static error, not a run-time one. The list order in the plan f
+          -ollows the **schedule order** (the order the user wrote them i
+          -n `[ ... ]`), not the declaration order — this gives the lifte
+          -r direct control over Monday-through-Sunday ordering without i
+          -ntroducing a separate day construct.                          
+      420 +"declared" is decided at parse time (§4.6.3 forward-reference 
+          +rule); a label in the schedule that names no declaration is a 
+          +static error, not a run-time one. The list order in each week 
+          +follows the **schedule order** (the order the user wrote them 
+          +in `[ ... ]`), not the declaration order — this gives the lift
+          +er direct control over Monday-through-Sunday ordering without 
+          +introducing a separate day construct.                         
+      421  
+      422 +Meals are constant across weeks because `<meal-decl>` has no r
+          +ate construct — a lifter changes intake by writing a new meal 
+          +declaration (and re-scheduling), not by attaching a progressio
+          +n to the existing one. This is intentional: bodyweight, lift l
+          +oad, and macro targets all move; the *meals you eat* are discr
+          +ete plans the lifter writes. If a future version wants per-wee
+          +k intake changes, the natural extension is `<when-decl>` keyed
+          + on `week index` rather than a meal-side rate.                
+      423 +                                                              
+      424  ### 4.4.9 Targets and macro arithmetic
+      425  
+      426  A `<target-decl>` is evaluated against the meals scheduled by 
+           `plan week` (not against every declared meal):
+
+● Update(docs\design\D1.md)
+  ⎿  Added 10 lines, removed 10 lines
+      423  
+      424  ### 4.4.9 Targets and macro arithmetic
+      425  
+      426 -A `<target-decl>` is evaluated against the meals scheduled by 
+          -`plan week` (not against every declared meal):                
+      426 +A `<target-decl>` is evaluated **once per week** against that 
+          +week's scheduled meals and projected bodyweight (not against e
+          +very declared meal, and not once for the whole plan):         
+      427  
+      428  ```
+      429  env ⊢ q ⇓ t : Mass
+      430 -planned = Σ { meal.<macro> | meal ∈ scheduled meals }         
+      431 -————————————————————————————————————————————————————   (TARGET
+          -, absolute form)                                              
+      430 +planned_k = Σ { meal.<macro> | meal ∈ scheduled meals at week 
+          +k }                                                           
+      431 +——————————————————————————————————————————————————————————————
+          +——   (TARGET, absolute form @ week k)                         
+      432  env ⊢ target <macro> <op> q
+      433 -            ⇓ TargetReport { macro, op, threshold=t, planned, 
+          -passes=(planned <op> t) }                                     
+      433 +            ⇓_k TargetReport { macro, op, threshold=t, planned
+          +=planned_k, passes=(planned_k <op> t) }                       
+      434  ```
+      435  
+      436 -The "per kg of bodyweight" form rescales the threshold using t
+          -he athlete's bodyweight:                                      
+      436 +The "per kg of bodyweight" form rescales the threshold by the 
+          +projected bodyweight of the current week:                     
+      437  
+      438  ```
+      439 -env ⊢ q ⇓ t : Mass    bw = env.bodyweight in kg               
+      440 -————————————————————————————————————————————————————   (TARGET
+          -, per-bw form)                                                
+      439 +env ⊢ q ⇓ t : Mass    bw_k = projected bodyweight at week k (§
+          +4.4.8)                                                        
+      440 +——————————————————————————————————————————————————————————————
+          +——   (TARGET, per-bw form @ week k)                           
+      441  env ⊢ target <macro> <op> q per kg of bodyweight
+      442 -            ⇓ TargetReport { macro, op, threshold = t × bw, pl
+          -anned, passes }                                               
+      442 +            ⇓_k TargetReport { macro, op, threshold = t × (bw_
+          +k in kg), planned=planned_k, passes }                         
+      443  ```
+      444  
+      445 -The "× bw" here is the one place the language uses *quantity s
+          -caled by a scalar drawn from a quantity's numeric value* — §4.
+          -5.4 forbids `Mass × Mass`, but the `per UNIT of bodyweight` fo
+          -rm is sugar for "treat the bodyweight value in the named unit 
+          -as a dimensionless multiplier." This is the same trick Ada `'P
+          -os` does for enumerations (Sebesta §6.4) — a privileged projec
+          -tion from a typed value to a number, available only in the nam
+          -ed sugar form, never as a general expression operator.        
+      445 +The "× bw" here is the one place the language uses *quantity s
+          +caled by a scalar drawn from a quantity's numeric value* — §4.
+          +5.4 forbids `Mass × Mass`, but the `per UNIT of bodyweight` fo
+          +rm is sugar for "treat the projected bodyweight in the named u
+          +nit as a dimensionless multiplier." This is the same trick Ada
+          + `'Pos` does for enumerations (Sebesta §6.4) — a privileged pr
+          +ojection from a typed value to a number, available only in the
+          + named sugar form, never as a general expression operator.    
+      446  
+      447 -`<goal-rate-decl>` is stored on the plan but does not drive an
+          -y computation in P2 — it is reported as `goalRate` in the outp
+          -ut and consistency-checked against the header `goal` mode (`bu
+          -lk` with `lose` is rejected) by the type checker, not by the s
+          -emantics.                                                     
+      447 +`<goal-rate-decl>` drives the per-week bodyweight projection o
+          +f §4.4.8 and is consistency-checked against the header `goal` 
+          +mode (`bulk` with `lose` is rejected) by the type checker. Mea
+          +ls are constant across weeks (§4.4.8), so `planned_k` differs 
+          +across weeks only when a future extension lets the schedule pi
+          +ck different meals per week.                                  
+      448  
+      449  ### 4.4.10 The `when` control structure
+      450  
+
+● Update(docs\design\D1.md)
+  ⎿  Added 2 lines, removed 2 lines
+      468  env₀ = ∅
+      469  env₁ = env₀ ∪ { bodyweight ↦ ..., goal ↦ ... }    // from <ath
+           lete-params>
+      470  env₂ = thread <let-decl>s through env₁              // §4.4.5
+      471 -WeeklyPlan = evaluate <schedule-stmt> in env₂       // §4.4.8 
+      471 +Plan = evaluate <schedule-stmt> in env₂             // §4.4.8 
+          +(N ≥ 1 weeks)                                                 
+      472  ————————————————————————————————————————————————   (PROGRAM)
+      473 -⊢ <athlete-block>  ⇓  WeeklyPlan                              
+      473 +⊢ <athlete-block>  ⇓  Plan                                    
+      474  ```
+      475  
+      476  For a variant of the §4.1 sample (bodyweight 78 kg, goal bulk,
+            `"Push Day"` with bench at 80 kg and `progress weight 2.5 kg/
+           week`, `"Breakfast"` at protein 40 g, `target protein >= 1.8 g
+            per kg of bodyweight`, `goal gain 0.25 kg/week`, scheduled as
+            `plan 4 week with workouts: ["Push Day"], meals: ["Breakfast"
+           ]`):
+
+● Multi-week patch complete. Changes:
+
+  - §4.3.2 — <schedule-stmt> → "plan" [ NUM_LIT ] "week" "with" 
+  <schedule-clauses> (optional integer; LL(1) preserved — disjoint look-ahead
+  NUM_LIT vs "week").
+  - §4.4.2 — denotation renamed WeeklyPlan → Plan { athlete, weeks: [Week] };
+  per-Week carries projectedBodyweight, its workouts, meals, targets.
+  - §4.4.6 — EXERCISE @ week k rule: weight = base + progressRate × (k−1) week.
+  <progress-stmt> no longer attaches nextWeekWeight; it binds the workout's
+  progressRate used by the per-week rule.
+  - §4.4.8 — new plan [N] week rule: loop k=1..N, project bodyweight, evaluate
+  workouts & targets per week. Meals are constant across weeks (with rationale).
+  - §4.4.9 — TARGET @ week k uses that week's bw_k and that week's planned_k.
+  - §4.4.11 — worked example rewritten as a 4-week bulk block to actually
+  exercise the projection.
+
+  Ready to draft §4.7 Expressions & Assignment and §4.8 Rationale next. §4.7 is
+  mostly bookkeeping — operator precedence table, associativity, evaluation
+  order, plus the "no assignment statement" stance (binding only). §4.8 is one
+  paragraph per major decision with the trade-off named.
+
+  Want me to push straight through both, or pause to sanity-check anything?
+
+✻ Brewed for 3m 6s
+
+❯ nice, let's continue                                                          
+
+● Update(docs\design\D1.md)
+  ⎿  Added 75 lines, removed 1 line
+      683  
+      684  ## 4.7 Expressions & Assignment **[P2]**
+      685  
+      686 -*Operator precedence, associativity, short-circuit semantics, 
+          -operand evaluation order, assignment statement vs. expression 
+          -— added for Part 2.*                                          
+      686 +### 4.7.1 The expression layer in full                        
+      687  
+      688 +P1 admitted only `<expression> → <term> { ("+" | "-") <term> }
+          +` over `NUM_LIT`, `<quantity>`, and `IDENT`. P2 broadens the l
+          +ayer to the full arithmetic subset the type rules of §4.5 admi
+          +t, restated as a precedence-stratified EBNF:                  
+      689 +                                                              
+      690 +```ebnf                                                       
+      691 +<expression>   → <add-expr>                                   
+      692 +<add-expr>     → <mul-expr> { ("+" | "-") <mul-expr> }        
+      693 +<mul-expr>     → <unary>    { ("*" | "/") <unary>    }        
+      694 +<unary>        → [ "-" ] <atom>                               
+      695 +<atom>         → NUM_LIT [ UNIT [ "/" UNIT ] ]      // scalar,
+          + quantity, or rate                                            
+      696 +               | IDENT                                        
+      697 +               | "(" <expression> ")"                         
+      698 +```                                                           
+      699 +                                                              
+      700 +`<rate>` (introduced lexically in §4.3.2 for `<progress-stmt>`
+          + and `<goal-rate-decl>`) is admitted into the atom alternative
+          + here so that `2.5 kg/week` can appear in a `<let-decl>` RHS a
+          +s well as in those statement positions. The parser distinguish
+          +es the rate atom (`NUM_LIT UNIT "/" UNIT`) from the binary-`/`
+          + form (`<unary> "/" <unary>` inside `<mul-expr>`) by looking o
+          +ne token past the `/`: if the next token is a `UNIT` and the p
+          +receding atom was a bare `NUM_LIT UNIT` pair, it is a rate ato
+          +m; otherwise it is multiplicative division. This is the same o
+          +ne-token disambiguation Sebesta describes for the C `*` operat
+          +or (multiplication vs dereference, §4.4) and is LL(1) under th
+          +e look-ahead the recursive-descent parser already maintains.  
+      701 +                                                              
+      702 +### 4.7.2 Operator precedence and associativity               
+      703 +                                                              
+      704 +| Level (tight → loose) | Operators | Associativity | Sebesta 
+          +analogue (§7.2) |                                             
+      705 +|---|---|---|---|                                             
+      706 +| 1 | unary `-` | right | C, Java, Pascal |                   
+      707 +| 2 | `*`, `/` | left | C, Java |                             
+      708 +| 3 | `+`, `-` (binary) | left | C, Java |                    
+      709 +| 4 | `>`, `<`, `>=`, `<=`, `==`, `!=` | non-associative | Pas
+          +cal (Sebesta §7.2 — chained comparisons disallowed) |         
+      710 +                                                              
+      711 +Relational operators appear only inside `<target-decl>` (`targ
+          +et <macro> <op> <quantity>` per §4.3.2), never inside `<expres
+          +sion>`; they are not part of the precedence-stratified grammar
+          + above. The "non-associative" call means `a < b < c` is not wr
+          +itable in FitLang because the grammar admits exactly one `<rel
+          +-op>` after `target <macro>` — and we keep it that way because
+          + the Python-style chained-comparison reading (`a < b ∧ b < c`)
+          + is the only sensible one and the lifter writes one relation p
+          +er target line.                                               
+      712 +                                                              
+      713 +There are **no boolean operators** (`&&`, `||`, `!`) and conse
+          +quently no short-circuit semantics question (Sebesta §7.7). Th
+          +e only conditional construct in the language, `<when-decl>`, d
+          +ispatches on a single mode literal (§4.4.10) — there is no nee
+          +d for compound predicates. Adding boolean operators later woul
+          +d be a strictly additive change at precedence level 5 (below r
+          +elational).                                                   
+      714 +                                                              
+      715 +### 4.7.3 Operand evaluation order                            
+      716 +                                                              
+      717 +Operand evaluation is **left-to-right** by convention — but th
+          +e order is *unobservable*. By §4.6.6 immutability and §4.4.1 p
+          +urity, two evaluation orders that respect the no-forward-refer
+          +ence rule produce identical values. The Sebesta §7.5 "function
+          +al side effects in operands" hazard (the classic `a + f(a)` pr
+          +oblem in C) does not exist in FitLang because no expression fo
+          +rm has side effects: `<let-decl>` is the only environment-exte
+          +nding construct and it is a statement, not an expression. We t
+          +herefore do not specify a stricter operand order than left-to-
+          +right and the language definition does not constrain implement
+          +ers who would prefer to constant-fold or reorder for performan
+          +ce.                                                           
+      718 +                                                              
+      719 +### 4.7.4 Assignment statement — there isn't one              
+      720 +                                                              
+      721 +FitLang has **no assignment statement** in Sebesta §7.6's sens
+          +e (an L-value target whose stored value is replaced). The two 
+          +tokens that look like assignment in the surface syntax mean so
+          +mething else:                                                 
+      722 +                                                              
+      723 +- `=` in `<let-decl>` (`let x = <expression>`) is the **bindin
+          +g** operator — it introduces a fresh name in the immediately e
+          +nclosing environment and is illegal if the name is already bou
+          +nd (§4.6.3 no-shadowing). Semantically it is the `let x = e in
+          + ...` of ML, not the `x := e` of Pascal. There is no L-value h
+          +ere — `x` is a name, not a cell.                              
+      724 +- `:` in record literals (`weight: 80 kg`, `protein: 40 g`) is
+          + the **field initialisation** operator — it pairs a fixed sche
+          +ma field name with its value at construction time. The schema 
+          +is closed (§4.5.6) so this is not a generic key-value form; it
+          + is the same syntax Ada uses for aggregate component associati
+          +on (Sebesta §6.7) and Pascal for record-literal initialisation
+          +.                                                             
+      725 +                                                              
+      726 +The choice to omit assignment entirely is downstream of §4.6.6
+          + immutability (single-assignment discipline, in the Erlang / R
+          +ust-default sense). Assignment requires storage to mutate, sto
+          +rage requires the user to reason about *when* the cell holds *
+          +which* value, and that reasoning is exactly what Sebesta §7.6 
+          +spends three pages warning the reader about. FitLang sidesteps
+          + the problem by not paying for the expressivity in the first p
+          +lace — the iterative state a lifter cares about (week-over-wee
+          +k weight progression) is recovered declaratively by `progress`
+          + + `plan N week` (§4.4.6, §4.4.8), not by mutating a cell.    
+      727 +                                                              
+      728 +### 4.7.5 Expression type rules — summary                     
+      729 +                                                              
+      730 +The type of every well-typed expression is determined by §4.5.
+          +4–§4.5.5. Relevant for §4.7's broader form:                   
+      731 +                                                              
+      732 +- Unary `-` preserves the type of its operand (`Number → Numbe
+          +r`, `Quantity D → Quantity D`, `Rate(D₁,D₂) → Rate(D₁,D₂)`).  
+      733 +- Parenthesised expressions take the type of their inner expre
+          +ssion.                                                        
+      734 +- `*` and `/` outside `<rate>` follow §4.5.4 rules 3–4 and §4.
+          +5.5; in particular, same-family `*` and `/` remain static erro
+          +rs, so the broadened expression layer of §4.7.1 does not enlar
+          +ge the value set, only the surface forms that can produce it. 
+      735 +                                                              
+      736  ---
+      737  
+      738  ## 4.8 Design Rationale **[P2]**
+      739  
+      740 +This section restates the major design decisions as decisions 
+          +— what was on the table, what was picked, and what was given u
+          +p to pick it. Each paragraph names one trade-off Sebesta would
+          + recognise.                                                   
+      741 +                                                              
+      742 +**Closed lexicon, no shadowing.** Every alphabetic lexeme is e
+          +ither a reserved word, mode literal, unit, or an `IDENT` disjo
+          +int from all three (§4.2.5, §4.6.3). We pay the rigidity Sebes
+          +ta credits Pascal for (§3.1) — a user cannot use `weight` as a
+          + let-name — and we earn the property that the parser never has
+          + to disambiguate keyword from identifier and the type checker 
+          +never has to resolve a shadowed binding. For a DSL whose users
+          + are not software engineers, the rigidity cost is invisible (n
+          +o one wants to call their let-binding `weight`) and the predic
+          +tability payoff is real (every error message can point at a si
+          +ngle declaration site).                                       
+      743 +                                                              
+      744 +**Strong typing with dimensional families.** §4.5.2 commits to
+          + compile-time rejection of every cross-family operation and di
+          +sallows same-family `*` and `/` outside the named `per UNIT of
+          + bodyweight` sugar. The cost is the ergonomic ceremony Sebesta
+          + credits Java for paying against C in §1.6 — `80 kg + 200` is 
+          +rejected, the user writes `+ 200 g` (or `+ 0.2 kg`). The payof
+          +f is that the entire class of "I mixed kcal and kJ" or "I wrot
+          +e a kg where I meant g" bugs is eliminated at parse-plus-check
+          + time, before the lifter sees a single nonsensical training we
+          +ek.                                                           
+      745 +                                                              
+      746 +**Name equivalence on record kinds.** §4.5.3 picks name over s
+          +tructural equivalence. The cost is the loss of structural flex
+          +ibility — a hypothetical future kind that happens to share `ex
+          +ercise`'s schema would not interoperate with it. The payoff is
+          + the one-sentence quiz defence ("same kind ⇒ same type") and a
+          + checker that needs no field-by-field comparison routine. Beca
+          +use the grammar pins each kind to one schema, name and structu
+          +ral agree on every legal program — the choice is *which rule t
+          +o teach*, and name is the simpler teach.                      
+      747 +                                                              
+      748 +**Single-assignment, no mutation.** §4.6.6 commits to immutabi
+          +lity. The cost is the inability to express imperative iteratio
+          +n — `weight = weight + 2.5 kg` is not writable. The payoff is 
+          +that lifetime = scope (§4.6.4), no dangling references, no ini
+          +tialise-before-use rule, no garbage collection story, and a si
+          +ngle-pass type checker. The iterative content the domain needs
+          + (week-over-week weight) is recovered declaratively by `progre
+          +ss` + `plan N week`, which is honest to how a lifter actually 
+          +writes a periodised block: a base, a rate, a horizon.         
+      749 +                                                              
+      750 +**Static (lexical) scoping with a flat athlete-scope env.** §4
+          +.6.3 takes Sebesta §5.5.1's C/Pascal/Java lineage and rejects 
+          +dynamic scoping outright. The cost — none, given no first-clas
+          +s procedures — is genuinely zero in this language, and the pay
+          +off is that the referencing environment at any program point i
+          +s computable from the AST alone. Routines (§4.4.7) are scoped 
+          +at their declaration site, not at the call site, for the same 
+          +reason: the lifter should never write a routine whose meaning 
+          +depends on which workout it is called from.                   
+      751 +                                                              
+      752 +**Multi-week schedule as a first-class horizon.** §4.4.8 makes
+          + `plan N week` the unit of output, not `plan week`. The cost i
+          +s a slightly larger interpreter loop and longer D3 outputs. Th
+          +e payoff is that `progress` and `goal lose/gain` become load-b
+          +earing — the language earns its keywords. A snapshot-only DSL 
+          +would carry those constructs as ornaments; a horizon-bearing D
+          +SL uses them to project a typed training block, which is the d
+          +ifference between a notebook syntax and a planning language.  
+      753 +                                                              
+      754 +**Static `when`.** §4.4.10 decides the `<when-decl>` branch at
+          + compile time because the dispatch value is the literal goal m
+          +ode bound in `<athlete-params>`. The cost is the inability to 
+          +predicate on runtime values — but FitLang has no runtime value
+          +s to predicate on (no input). The payoff is zero dispatch cost
+          + and dead-branch elimination before the semantics rules run, w
+          +hich keeps the operational story uniform: every program is a s
+          +traight-line evaluation.                                      
+      755 +                                                              
+      756 +**No user-defined types.** §4.5.1 freezes the type universe at
+          + three scalar-or-quantity categories plus four named record ki
+          +nds. The cost is extensibility — a user cannot introduce a `ci
+          +rcuit` kind without changing the grammar. The payoff is the si
+          +ngle-pass linear-time checker (§4.5.2) and the closed equivale
+          +nce rule (§4.5.3); both rely on the universe being finite and 
+          +listable. Extensibility for a course DSL is not a real require
+          +ment, and the version that *does* want it can spend a paragrap
+          +h adding `kind "circuit" { ... }` without disturbing anything 
+          +else.                                                         
+      757 +                                                              
+      758 +**Two name spaces (label vs identifier).** §4.6.1 separates `S
+          +TRING_LIT` labels from `IDENT` let-names at the lexical level.
+          + The cost is a minor learning surface (a user has to know whic
+          +h kind of name goes where) — moot because the grammar slots ea
+          +ch kind in different positions and the surface syntax makes th
+          +e choice for them. The payoff is the Common Lisp §5.2 advantag
+          +e Sebesta lists: an enlarged vocabulary with zero parser ambig
+          +uity, and the consequence that a `<schedule-stmt>` and an `<ex
+          +pression>` can never collide on the same name.                
+      759 +                                                              
+      760 +**Java tree-walking interpreter.** Implementation choice drive
+          +n by Sebesta §1.7's pure-interpretation discussion — at least 
+          +an order of magnitude slower than compiled code, irrelevant fo
+          +r the domain (a 78 kg lifter is not going to notice the differ
+          +ence between a 5 ms and a 50 ms plan calculation). The payoff 
+          +is the simplest possible mapping from §4.4's operational rules
+          + to executable code, which is also what makes E3 (D4 — AI impl
+          +ements the type checker) a tractable experiment to evaluate.  
+      761 +                                                              
+      762 +---                                                           
+      763 +                                                              
+      764 +## 4.8 Design Rationale **[P2]**                              
+      765 +                                                              
+      766  *One paragraph per major design decision, with a named trade-o
+           ff — added for Part 2.*
+
+● D1 §4.7 and §4.8 drafted. That closes out the D1 P2 prose — all four P2
+  sections (§4.4 Semantics, §4.5 Type System, §4.7 Expressions & Assignment,
+  §4.8 Rationale) are now written.
+
+  Let me set up tasks for the remaining Part 2 work over the next 6 days.
+● Tasks queued. Two things to flag before we move:
+
+  1. Today's session needs a journal entry (per the D4 cadence). I can draft it
+  from this conversation — but per memory it must be authentic (no pre-written
+  Accepted/Rejected/Reflection that you didn't actually say). Want me to draft a
+   skeleton based on what we actually decided here (name equivalence, let A+C,
+  multi-week B) and let you fill in Reflection?
+  2. Suggested next step: patch the parser to match the new grammar (Task #1),
+  since the interpreter and type checker both need the updated AST shape. After
+  that the type checker is the natural next piece because the interpreter
+  assumes well-typed input.
+
+  Which do you want to tackle next — journal entry, or jump into Task #1?
+
+✻ Churned for 2m 2s
+
+❯ create an entry                                                               
+
+  Read 2 files (ctrl+o to expand)
+
+● Write(docs\ai-journal\entries\07_2026-05-16_P2-design-session.md)
+  ⎿  Wrote 84 lines to
+     docs\ai-journal\entries\07_2026-05-16_P2-design-session.md
+       2 entry: 07
+       3 date: 2026-05-16
+       4 phase: Design — D1 P2 sections (§4.4 Semantics, §4.5 Type System
+         , §4.7 Expressions, §4.8 Rationale)
+       5 ai_tool: Claude Opus 4.7
+       7 ---
+       8 # Entry 07 — Part 2 design kickoff: type system, semantics, mult
+         i-week schedule
+       9 
+      10 ## Goal
+     … +165 lines (ctrl+o to expand)
+
+● Entry 07 written at
+  docs/ai-journal/entries/07_2026-05-16_P2-design-session.md. Per the
+  journal-authenticity rule, Reflection is left blank for you to fill in —
+  that's the one section that has to be your own words.
+
+  Goal / Prompt-shape / Response / Accepted / Rejected / Errors-caught are all
+  factual records of what happened in this session, so I drafted those.
+
+  When you're ready, fill in the Reflection and we can move to the parser update
+   (Task #1) or wherever you want to go next.
+
+✻ Sautéed for 1m 16s
+
+※ recap: Part 2 of FitLang is underway; D1 P2 sections (§4.4, §4.5, §4.7, §4.8) are drafted with multi-week schedule and name equivalence locked in, and today's journal entry is written. Next: patch the parser for the new grammar (Task #1). (disable recaps in /config)
+
+❯ reflections is filled. check it end let's stop for today. We will continue to 
+   your list later.                                                             
+
+  Read 1 file (ctrl+o to expand)
+
+● Reflection looks good — authentic, your own framing of what shifted today.
+  Have a good rest, we'll pick up at Task #1 (parser/lexer update for P2
+  grammar) next time.
+
+✻ Baked for 7s
+
+❯ ok, than let's commit                                                         
+
+● Bash(git status)
+  ⎿  On branch main
+     Your branch is up to date with 'origin/main'.
+     … +11 lines (ctrl+o to expand)
+
+● Bash(git log -5 --oneline)
+  ⎿  7177d3e Add submission-build tooling and gitignore build artifacts
+     5620c58 Add D4 entry 06 and E1 experiment raw outputs
+     c77924c Add D5 half-page retrospective for Part 1
+     … +2 lines (ctrl+o to expand)
+
+● Bash(git add docs/design/D1.md
+      docs/ai-journal/entries/07_2026-05-16_P2-design-session.md && git commit
+      -m "$(cat <<'EOF'
+      Draft D1 Part 2 sections and add multi-week…)
+  ⎿  warning: in the working copy of 'docs/design/D1.md', LF will be replac
+     ed by CRLF the next time Git touches it
+     warning: in the working copy of 'docs/ai-journal/entries/07_2026-05-16
+     … +6 lines (ctrl+o to expand)
+
+● Committed as 3d24727. See you next session.
+✻ Crunched for 12s
+
+❯ see you                                                                       
+
+● 👋
+
+✻ Brewed for 1s
