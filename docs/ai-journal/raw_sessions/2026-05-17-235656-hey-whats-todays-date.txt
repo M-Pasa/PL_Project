@@ -1,0 +1,1334 @@
+ ▐▛███▜▌   Claude Code v2.1.143
+▝▜█████▛▘  Opus 4.7 · Claude Pro
+  ▘▘ ▝▝    ~\OneDrive\Documents\Projects\PL\PL_Project
+
+❯ hey, whats todays date                                                        
+
+● Today is 2026-05-17.
+
+✻ Churned for 1s
+
+❯ nice, last time we worked on let and sheduling last time, we will continue in 
+   P2, but before that tell me if you need book chapters I will put them in     
+  docs                                                                          
+
+  Listed 2 directories (ctrl+o to expand)
+
+● Yes please — for Part 2 the most relevant Sebesta chapters would be:
+
+  - Ch 6 — Data Types (useful for your dimensional unit families)
+  - Ch 7 — Expressions and Assignment Statements (coercion rules)
+  - Ch 8 — Statement-Level Control Structures (if you add conditionals/loops)
+  - Ch 9 — Subprograms (if Part 2 expects functions/procedures in FitLang)
+
+  Ch 6 and 7 are the highest priority given your unit-family design. Drop them
+  in docs/BOOK/ whenever ready.
+
+✻ Sautéed for 17s
+
+※ recap: Working on FitLang DSL Part 2 for CSE 341, continuing from Part 1's let/scheduling work. Next: you're adding Sebesta chapters 6 and 7 (priority) plus 8 and 9 to docs/BOOK/ so we can start Part 2 design. (disable recaps in /config)
+
+❯ ok added ch6 and ch7, let's start P2                                          
+
+  Listed 1 directory, recalled 1 memory (ctrl+o to expand)
+
+● Bash(ls && ls docs/ai-journal/ 2>$null | Select-Object -Last 10)
+  ⎿  Error: Exit code 127
+     README.md
+     build
+     compile.bat
+     docs
+     out
+     samples
+     src
+     tools
+     /usr/bin/bash: line 1: $null: ambiguous redirect
+     … +1 line (ctrl+o to expand)
+
+  Read 2 files, listed 1 directory (ctrl+o to expand)
+
+● Welcome back. Quick state check: D1 P2 sections were drafted last session
+  (§4.4 semantics, §4.5 type system, §4.7 expressions, §4.8 rationale).
+  Remaining P2 work, with 5 days to deadline (Fri 22 May):
+
+  - D2: type checker + interpreter on top of existing lexer/parser
+  - D3: executed outputs + a type-error program
+  - D4: E2 (name vs structural equivalence write-up) + E3 (AI implements type
+  checker)
+  - D5: full-page retro
+
+  Where do you want to start?
+
+● User answered Claude's questions:
+  ⎿  · Which P2 thread do you want to pick up first? → Review D1 P2 draft first
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● Heads up — there are two ## 4.8 headers (lines 738 and 764), one is a
+  duplicate. Reading the P2 sections now.
+
+  Read 1 file (ctrl+o to expand)
+
+● Read through §4.4, §4.5, §4.7, §4.8. Here's what I'd flag before we lock the
+  draft:
+
+  Cleanup
+  - Lines 762–767: duplicate ## 4.8 stub left over from the P1 placeholder —
+  delete.
+
+  Internal inconsistency (real bug)
+  - §4.5.5 says "No other rate arithmetic is allowed — no rate + rate", but the
+  §4.5.8 pseudocode for +/− is check(e1) = check(e2) ⇒ check(e1) — which would
+  silently accept Rate(D,T) + Rate(D,T). Either tighten the pseudocode
+  (Number+Number | Quantity D + Quantity D) or relax §4.5.5. Quiz-vulnerable.
+
+  Defendability flags — worth you eyeballing
+  - §4.7.1 rate/divide disambiguation. Claims LL(1) but the rule is "if next
+  token is UNIT and the preceding atom was bare NUM_LIT UNIT, treat as rate
+  atom." That's effectively k=2 (peek past the /). Sebesta would call this a
+  1-symbol lookahead after the operator — fine in practice, but if the grader
+  asks "is your grammar strictly LL(1)?" you'll want a sharper answer.
+  - §4.4.9 per UNIT of bodyweight sugar. Defended by analogy to Ada 'Pos. The
+  analogy is loose ('Pos is enum→int, here it's Mass→Number). Defensible, but if
+   asked "is this not a hole in your strong typing?" the better answer is "it's
+  a single named projection, not a general operator — like Integer'Pos(E), you
+  can't write the projection without invoking the named form." Just make sure
+  you'd say something like that.
+  - §4.5.4 rule 1 example. 1 lb + 1 kg is given as a legal Mass. Confirm lb is
+  actually in your §4.2.6 unit set — if not, swap the example.
+  - §4.4.7 routine scoping. "Routine sees lets at declaration site." Given the
+  flat athlete-scope env + no-forward-reference rule, this collapses to "sees
+  every let textually before the routine decl." That's fine, but you should know
+   it's not buying you anything beyond what the flat env already gives — there's
+   no caller-vs-declaration-site difference because there's no nested scope to
+  differ.
+
+  Minor formalism
+  - §4.4.5 uses ⇝ for environment-extension while §4.4.1 only introduces ⇓. Add
+  one line in §4.4.1: "⇝ denotes the environment-extension judgement used for
+  declarations."
+
+  Want me to make the cleanup edits (duplicate header + §4.5.8 pseudocode
+  tightening) and leave the defendability items for you to think about?
+
+✻ Sautéed for 1m 44s
+
+❯ do it                                                                         
+
+● Update(docs\design\D1.md)
+  ⎿  Removed 5 lines
+      759  
+      760  **Java tree-walking interpreter.** Implementation choice drive
+           n by Sebesta §1.7's pure-interpretation discussion — at least 
+           an order of magnitude slower than compiled code, irrelevant fo
+           r the domain (a 78 kg lifter is not going to notice the differ
+           ence between a 5 ms and a 50 ms plan calculation). The payoff 
+           is the simplest possible mapping from §4.4's operational rules
+            to executable code, which is also what makes E3 (D4 — AI impl
+           ements the type checker) a tractable experiment to evaluate.
+      761  
+      762 ----                                                           
+      763 -                                                              
+      764 -## 4.8 Design Rationale **[P2]**                              
+      765 -                                                              
+      766 -*One paragraph per major design decision, with a named trade-o
+          -ff — added for Part 2.*                                       
+
+● Update(docs\design\D1.md)
+  ⎿  Added 3 lines, removed 2 lines
+      580  check(RATE n u1 u2)           = Rate(family u1, family u2)
+      581  check(IDENT x)                = env(x)                      //
+            single env, single pass
+      582  check(e1 "+" e2)
+      583 -  | check(e1) = check(e2)     = check(e1)                   //
+          - same scalar OR same family                                   
+      584 -  | otherwise                 = error "cannot add T1 and T2"  
+      583 +  | (Number, Number)          = Number                        
+      584 +  | (Quantity D, Quantity D)  = Quantity D                  //
+          + same family, §4.5.4(1)                                       
+      585 +  | otherwise                 = error "cannot add T1 and T2" /
+          +/ rejects Rate+Rate, cross-family, mixed                      
+      586  check(e1 "-" e2)              = same as "+"
+      587  check(e1 "*" e2)
+      588    | (Number, Quantity D)      = Quantity D                  //
+            rule 4.5.4(3)
+
+● Update(docs\design\D1.md)
+  ⎿  Added 1 line, removed 1 line
+      296  
+      297  ### 4.4.1 Style and meta-language
+      298  
+      299 -The semantics is given **operationally** in big-step (natural-
+          -semantics) style — the form Sebesta surveys in §3.5.1 and cred
+          -its to Plotkin/Kahn. A FitLang program denotes a value of type
+          - `WeeklyPlan` (defined in §4.4.2); each evaluation rule has th
+          -e shape `env ⊢ node ⇓ value`, read "in environment *env*, AST 
+          -node *node* evaluates to *value*." We pick operational over de
+          -notational (§3.5.2) and axiomatic (§3.5.3) for the same reason
+          - every Sebesta-style intro DSL does: it maps directly onto the
+          - tree-walking interpreter in D2 and is the form the user can d
+          -efend in the quiz without a domain-theory aside.              
+      299 +The semantics is given **operationally** in big-step (natural-
+          +semantics) style — the form Sebesta surveys in §3.5.1 and cred
+          +its to Plotkin/Kahn. A FitLang program denotes a value of type
+          + `WeeklyPlan` (defined in §4.4.2); each evaluation rule has th
+          +e shape `env ⊢ node ⇓ value`, read "in environment *env*, AST 
+          +node *node* evaluates to *value*." Declarations use a separate
+          + judgement `env ⊢ decl ⇝ env'`, read "in environment *env*, de
+          +claration *decl* extends the environment to *env'*" — used by 
+          +the (LET) rule of §4.4.5. We pick operational over denotationa
+          +l (§3.5.2) and axiomatic (§3.5.3) for the same reason every Se
+          +besta-style intro DSL does: it maps directly onto the tree-wal
+          +king interpreter in D2 and is the form the user can defend in 
+          +the quiz without a domain-theory aside.                       
+      300  
+      301  A FitLang program is **pure, declarative, and one-shot**: no i
+           nput, no I/O during evaluation, no mutation, no nondeterminism
+           . Evaluation order is fixed by the grammar (top-down, left-to-
+           right over the children of each node) but the order is observa
+           tionally irrelevant — by §4.6.6 immutability, two visit orders
+            that respect the no-forward-reference rule of §4.6.3 produce 
+           the same `WeeklyPlan`.
+      302  
+
+● Done. Three edits:
+  1. Removed the duplicate §4.8 stub at the end.
+  2. Tightened the §4.5.8 +/− pseudocode to enumerate the two legal cases
+  (Number+Number, Quantity D + Quantity D), so Rate+Rate now falls through to
+  error — matches §4.5.5.
+  3. Added one sentence in §4.4.1 introducing the ⇝ declaration-extension
+  judgement so §4.4.5 isn't using unintroduced notation.
+
+  Still on your plate (defendability items, no code change needed): the
+  LL(1)-vs-k=2 framing in §4.7.1, the 'Pos analogy in §4.4.9, the lb unit check,
+   and the routine-scoping point in §4.4.7. Want to tackle any of those now, or
+  move on to the next P2 thread?
+✻ Cogitated for 14s
+
+❯ whats next                                                                    
+
+● D1 P2 is locked. Natural next step: knock out E2 (AI explains name vs
+  structural equivalence) while §4.5.3 is fresh — it's short (one prompt +
+  compare against Sebesta §6.14, write the journal entry), and it lets you move
+  into the type checker next with both P2 experiments lined up to capture as you
+   implement (type checker doubles as E3).
+
+  Want to do E2 now, or skip straight to type-checker implementation?
+
+✻ Sautéed for 8s
+
+❯ give me the prompt, should I give it to an LLM that has no context about the  
+  project?                                                                      
+
+● Yes — fresh context is the right call. If you feed it your D1, it'll parrot
+  your §4.5.3 reasoning and the experiment proves nothing. The point of E2 is an
+   independent take you can compare against your own and against Sebesta §6.14.
+
+  Give it just enough to reason about FitLang's records, without leaking your 
+  decision:
+
+  ---
+
+  ▎ I'm designing a small DSL called FitLang for writing fitness training 
+  ▎ programs together with nutrition. It has four record-like declarations, each
+  ▎  introduced by a fixed keyword:
+  ▎
+  ▎ - exercise "L" { sets: N, reps: N, weight: Mass }
+  ▎ - meal "L" { protein: Mass, carbs: Mass, fat: Mass } (one or more of these 
+  ▎ fields)
+  ▎ - workout "L" { ... list of exercises ..., optional progress rate }
+  ▎ - routine "L" (p: UNIT, ...) { ... list of exercises ... }
+  ▎
+  ▎ The grammar admits exactly one schema per kind keyword — a user cannot 
+  ▎ define their own record kinds and cannot add fields. Mass is a dimensional 
+  ▎ quantity type (kg, g, lb — all the same type).
+  ▎
+  ▎ Question: should FitLang use name equivalence or structural equivalence for 
+  ▎ these record kinds? Walk me through both options in the Sebesta Concepts of 
+  ▎ Programming Languages sense (Ch. 6), what each buys and costs, which real 
+  ▎ languages take each path, and which you'd pick for FitLang. Be specific 
+  ▎ about how the choice affects the type checker.
+
+  ---
+  After it answers, you compare to (a) Sebesta §6.14 directly and (b) your own
+  §4.5.3 — note where it agrees, disagrees, or raises something you hadn't. That
+   comparison is the body of journal entry 08.
+
+  One thing to watch: if the LLM is also Claude, it might independently land on
+  the same "they collapse to the same answer because the grammar admits one
+  schema per kind" observation you have. That's fine — note it as convergent
+  evidence in the journal, not as the AI cheating.
+
+✻ Cogitated for 16s
+
+※ recap: We're on CSE 341 Part 2: D1 P2 draft is reviewed and cleaned up, now running E2 (AI explains name vs structural equivalence for FitLang records). Next: paste the prompt I gave you into a fresh LLM session and capture its answer. (disable recaps in /config)
+
+❯ I did the experiment in 3 different flagship models, results are under        
+  @docs/ai-journal/experiments/E2\                                              
+  ⎿  Listed directory docs\ai-journal\experiments\E2\
+
+  Read 3 files (ctrl+o to expand)
+
+● Read all three. Quick synthesis:
+
+  Convergence (all three pick name equivalence) — same answer as your §4.5.3.
+  Defenses overlap heavily: domain semantics over shape, simpler checker (tag
+  comparison vs recursive structural), better error messages ("expected
+  exercise, got meal"), closed schema universe makes structural pointless.
+
+  Real-language citations are consistent with Sebesta §6.14:
+  - Nominal: Ada (Claude, Gemini), Pascal/C/C++/Java/C#/Rust/Swift, Haskell
+  newtype (Claude)
+  - Structural: TypeScript, Go interfaces, OCaml, Elm — all three named the same
+   set
+
+  Where your §4.5.3 is actually stronger than what the LLMs gave you — and this
+  is the headline of the experiment:
+
+  ▎ None of the three noticed that because the grammar admits exactly one schema
+  ▎  per kind, name and structural equivalence agree on every legal FitLang 
+  ▎ program. They all defended name on domain-semantic grounds ("a meal is not 
+  ▎ an exercise"). Your §4.5.3 makes that same domain argument plus the 
+  ▎ grammar-collapse argument, which is the genuinely Sebesta-flavoured one (the
+  ▎  choice is "which rule to teach", since both rules accept/reject the same 
+  ▎ programs).
+
+  That's the interesting E2 finding: three flagship models converge on the right
+   answer for the weaker reason.
+
+  Smaller points worth keeping:
+  - Claude's caveat: "the Mass type already does the right structural work at
+  the field level (kg/g/lb), so structural equivalence isn't needed for the one
+  genuinely structural thing in the language" — clean framing of your §4.5.4
+  within-family coercion as orthogonal to the §4.5.3 record-kind question. Worth
+   borrowing for quiz defence.
+  - GPT 5.5's "hybrid" proposal: nominal at type-equivalence time, structural
+  metadata for parse-time schema validation. That's exactly what you already do
+  (parser enforces fixed schema, checker only compares kind tags) — note this as
+   convergence with your implementation plan rather than a new idea.
+  - Gemini's future-proofing example (cardio accidentally matching meal) only
+  fires if FitLang opens the type universe — moot under §4.5.1's closed-universe
+   commitment. Worth noting it doesn't apply.
+
+  Want me to draft journal entry 08 with these findings? Structure would be:
+  Goal → Prompt → 3-model comparison table → Agreement / disagreement / what the
+   AIs missed → How this updates §4.5.3 (it doesn't — confirms with a sharper
+  defence).
+
+✻ Worked for 39s
+
+❯ yes                                                                           
+
+  Read 1 file (ctrl+o to expand)
+
+● Write(docs\ai-journal\entries\08_2026-05-17_E2-equivalence-experiment.md)
+  ⎿  Wrote 95 lines to
+     docs\ai-journal\entries\08_2026-05-17_E2-equivalence-experiment.md
+       2 entry: 08
+       3 date: 2026-05-17
+       4 phase: Design — E2 experiment (name vs structural equivalence fo
+       5 ai_tool: Claude Opus 4.7, Gemini 3.1 Pro, GPT 5.5 (three-model c
+         omparison)
+       6 ---
+       8 # Entry 08 — E2: name vs structural equivalence, three-model com
+         parison
+       9 
+      10 ## Goal
+     … +157 lines (ctrl+o to expand)
+
+● Drafted entry 08 at
+  docs/ai-journal/entries/08_2026-05-17_E2-equivalence-experiment.md. Structure
+  follows the template: goal, prompt, three-model comparison (verdict, shared
+  defences, language-citation table, what each model added), what all three
+  missed (grammar-collapse argument), accepted/rejected, errors-I-caught (no
+  factual errors, but the unanimous omission is itself the finding).
+
+  Per your journal-authenticity rule, I left the Reflection to one short line as
+   a placeholder — replace it with your own 2-3 sentences on what you actually
+  took away. Anything you said in this conversation that should go in
+  Accepted/Rejected that I missed?
+
+  Next thread when you're ready: start the type checker (D2), which doubles as
+  E3 evidence.
+
+✻ Baked for 52s
+
+❯ let's do it                                                                   
+
+  Read 1 file, listed 1 directory (ctrl+o to expand)
+
+● Looked at the current AST. Parser is at P1 expression level (only +/-, only
+  inside let). The P2 §4.7 expression layer (precedence-stratified: unary -, *,
+  /, rate atoms, parens) isn't in the parser/AST yet.
+
+  Order I'd recommend:
+
+  1. Extend lexer/parser/AST to the full §4.7 expression grammar (<add-expr>,
+  <mul-expr>, <unary>, <atom> with rate-vs-divide disambiguation). Small, ~30
+  min.
+  2. Write the type checker in a new fitlang.TypeChecker class. Single bottom-up
+   pass keyed on node kind, per §4.5.8 pseudocode. Reports diagnostics with
+  source positions.
+  3. Wire it into Main behind a --check flag (or always-on before AST dump).
+  4. Three known-answer test programs for E3 evidence: one well-typed, one
+  cross-family error, one rate-algebra-uses-time.
+
+  The reason to do (1) before (2): §4.5.4(3–4) and §4.5.5 (Rate × Time) are the
+  most interesting rules to demonstrate, and they're the ones D3's type-error
+  program will lean on. Writing a checker over a +/- only AST leaves E3 weak.
+
+  OK to start with the parser/AST extension?
+
+✻ Worked for 36s
+
+❯ yes                                                                           
+
+  Read 3 files (ctrl+o to expand)
+
+● Plan: add UnaryExpr and RateExpr AST nodes, rewrite the expression layer in
+  the parser (parseExpression → parseAdd → parseMul → parseUnary → parseAtom),
+  put the rate-vs-divide k=2 peek inside parseAtom, extend AstDumper.
+  BinaryExpr.op is already String, so *// need no AST change.
+
+● Update(src\fitlang\ast\Ast.java)
+  ⎿  Added 16 lines, removed 1 line
+      88  
+      89      public static final class BinaryExpr implements Expr {
+      90          public final Expr   left;
+      91 -        public final String op;   // "+" or "-"                
+      91 +        public final String op;   // "+", "-", "*", "/"        
+      92          public final Expr   right;
+      93  
+      94          public BinaryExpr(Expr left, String op, Expr right) {
+     ...
+       98          }
+       99      }
+      100  
+      101 +    public static final class UnaryExpr implements Expr {     
+      102 +        public final String op;   // "-"                      
+      103 +        public final Expr   operand;                          
+      104 +                                                              
+      105 +        public UnaryExpr(String op, Expr operand) {           
+      106 +            this.op      = op;                                
+      107 +            this.operand = operand;                           
+      108 +        }                                                     
+      109 +    }                                                         
+      110 +                                                              
+      111 +    public static final class RateExpr implements Expr {      
+      112 +        public final Rate rate;                               
+      113 +        public RateExpr(Rate rate) { this.rate = rate; }      
+      114 +    }                                                         
+      115 +                                                              
+      116      // ── Declaration nodes ──────────────────────────────────
+           ──────────────────
+      117  
+      118      /** Items that may appear inside a workout body: an inline
+            exercise or a routine call. */
+
+● Update(src\fitlang\Parser.java)  ⎿  Added 64 lines, removed 13 lines
+      490              denomTok.lexeme, Ast.familyOf(denomTok.type));
+      491      }
+      492  
+      493 -    // <expression> → <term> { <add-op> <term> }              
+      494 -    private Ast.Expr parseExpression() {                      
+      495 -        Ast.Expr left = parseTerm();                          
+      493 +    // <expression> → <add-expr>                              
+          +      (§4.7.1)                                                
+      494 +    // <add-expr>   → <mul-expr> { ("+" | "-") <mul-expr> }   
+      495 +    // <mul-expr>   → <unary>    { ("*" | "/") <unary>    }   
+      496 +    // <unary>      → [ "-" ] <atom>                          
+      497 +    // <atom>       → NUM_LIT [ UNIT [ "/" UNIT ] ]           
+          +       // scalar | quantity | rate                            
+      498 +    //              | IDENT                                   
+      499 +    //              | "(" <expression> ")"                    
+      500 +    //                                                        
+      501 +    // Rate/divide disambiguation lives inside parseAtom: once
+          + we've consumed                                               
+      502 +    // NUM_LIT UNIT, we peek two tokens — if (SLASH, UNIT), it
+          +'s a rate atom;                                               
+      503 +    // otherwise the SLASH belongs to the enclosing <mul-expr>
+          + as binary `/`.                                               
+      504 +                                                              
+      505 +    private Ast.Expr parseExpression() { return parseAddExpr()
+          +; }                                                           
+      506 +                                                              
+      507 +    private Ast.Expr parseAddExpr() {                         
+      508 +        Ast.Expr left = parseMulExpr();                       
+      509          while (check(Token.Type.PLUS) || check(Token.Type.MINU
+           S)) {
+      510              String op    = advance().lexeme;
+      498 -            Ast.Expr right = parseTerm();                     
+      511 +            Ast.Expr right = parseMulExpr();                  
+      512              left = new Ast.BinaryExpr(left, op, right);
+      513          }
+      514          return left;
+      515      }
+      516  
+      504 -    // <term> → <quantity> | NUM_LIT | IDENT                  
+      505 -    // Disambiguate NUM_LIT vs <quantity> by looking one token
+          - ahead.                                                       
+      506 -    private Ast.Expr parseTerm() {                            
+      517 +    private Ast.Expr parseMulExpr() {                         
+      518 +        Ast.Expr left = parseUnary();                         
+      519 +        while (check(Token.Type.STAR) || check(Token.Type.SLAS
+          +H)) {                                                         
+      520 +            String op    = advance().lexeme;                  
+      521 +            Ast.Expr right = parseUnary();                    
+      522 +            left = new Ast.BinaryExpr(left, op, right);       
+      523 +        }                                                     
+      524 +        return left;                                          
+      525 +    }                                                         
+      526 +                                                              
+      527 +    private Ast.Expr parseUnary() {                           
+      528 +        if (check(Token.Type.MINUS)) {                        
+      529 +            advance();                                        
+      530 +            return new Ast.UnaryExpr("-", parseAtom());       
+      531 +        }                                                     
+      532 +        return parseAtom();                                   
+      533 +    }                                                         
+      534 +                                                              
+      535 +    private Ast.Expr parseAtom() {                            
+      536          Token t = peek();
+      537          if (t.type == Token.Type.NUM_LIT) {
+      509 -            // quantity if the next token is a unit, otherwise
+          - bare number                                                  
+      510 -            boolean nextIsUnit = (pos + 1 < tokens.size())    
+      511 -                && isUnit(tokens.get(pos + 1).type);          
+      512 -            if (nextIsUnit) return new Ast.QuantityExpr(parseQ
+          -uantity());                                                   
+      538              advance();
+      514 -            return new Ast.NumExpr(Double.parseDouble(t.lexeme
+          -));                                                           
+      539 +            double value = Double.parseDouble(t.lexeme);      
+      540 +            // Bare number?                                   
+      541 +            if (!isUnit(peek().type))                         
+      542 +                return new Ast.NumExpr(value);                
+      543 +            // Has a unit — quantity or rate.                 
+      544 +            Token numerTok = advance();                       
+      545 +            // Peek for the rate continuation: SLASH then UNIT
+          +.                                                             
+      546 +            boolean isRate = check(Token.Type.SLASH)          
+      547 +                && (pos + 1 < tokens.size())                  
+      548 +                && isUnit(tokens.get(pos + 1).type);          
+      549 +            if (isRate) {                                     
+      550 +                advance(); // consume SLASH                   
+      551 +                Token denomTok = advance(); // the UNIT       
+      552 +                return new Ast.RateExpr(new Ast.Rate(         
+      553 +                    value,                                    
+      554 +                    numerTok.lexeme, Ast.familyOf(numerTok.typ
+          +e),                                                           
+      555 +                    denomTok.lexeme, Ast.familyOf(denomTok.typ
+          +e)));                                                         
+      556 +            }                                                 
+      557 +            return new Ast.QuantityExpr(new Ast.Quantity(     
+      558 +                value, numerTok.lexeme, Ast.familyOf(numerTok.
+          +type)));                                                      
+      559          }
+      560          if (t.type == Token.Type.IDENT) {
+      561              advance();
+      562              return new Ast.IdentExpr(t.lexeme);
+      563          }
+      564 +        if (t.type == Token.Type.LPAREN) {                    
+      565 +            advance();                                        
+      566 +            Ast.Expr inner = parseExpression();               
+      567 +            expect(Token.Type.RPAREN);                        
+      568 +            return inner;                                     
+      569 +        }                                                     
+      570          throw new FitLangException(
+      521 -            "Expected expression term (number, quantity, or id
+          -entifier)", t.line, t.col);                                   
+      571 +            "Expected expression atom (number, quantity, rate,
+          + identifier, or '(' )",                                       
+      572 +            t.line, t.col);                                   
+      573      }
+      574  }
+
+● Update(src\fitlang\AstDumper.java)
+  ⎿  Added 5 lines
+      141  
+      142      private String exprStr(Ast.Expr e) {
+      143          if (e instanceof Ast.QuantityExpr) return ((Ast.Quanti
+           tyExpr) e).qty.toString();
+      144 +        if (e instanceof Ast.RateExpr)     return ((Ast.RateEx
+          +pr) e).rate.toString();                                       
+      145          if (e instanceof Ast.NumExpr)      return String.value
+           Of(((Ast.NumExpr) e).value);
+      146          if (e instanceof Ast.IdentExpr)    return ((Ast.IdentE
+           xpr) e).name;
+      147 +        if (e instanceof Ast.UnaryExpr) {                     
+      148 +            Ast.UnaryExpr u = (Ast.UnaryExpr) e;              
+      149 +            return "(" + u.op + exprStr(u.operand) + ")";     
+      150 +        }                                                     
+      151          if (e instanceof Ast.BinaryExpr) {
+      152              Ast.BinaryExpr b = (Ast.BinaryExpr) e;
+      153              return "(" + exprStr(b.left) + " " + b.op + " " + 
+           exprStr(b.right) + ")";
+
+● Now let me compile and smoke-test against the existing samples.
+
+  Listed 1 directory (ctrl+o to expand)
+
+● Bash(javac -d out src/fitlang/FitLangException.java src/fitlang/Token.java
+      src/fitlang/ast/Ast.java src/fitlang/Lexer.java src/fitlang/Parser.java
+      src/fitlang/AstDum…)
+  ⎿  (No output)
+
+● Bash(java -cp out fitlang.Main --dump-ast samples/valid_01_full.fl 2>&1 | tail
+       -40)
+  ⎿  AthleteBlock
+       AthleteParams
+         bodyweight : 78.0 kg  [MASS]
+     … +26 lines (ctrl+o to expand)
+
+● Existing sample still parses. Quick stress test for the new expression forms:
+
+● Write(samples\_p2_expr_smoke.fl)
+  ⎿  Wrote 20 lines to samples\_p2_expr_smoke.fl
+      1 athlete(bodyweight: 78 kg, goal: bulk) {
+      2 
+      3     workout "Push Day" {
+      4         exercise "Bench" { sets: 4, reps: 6, weight: 80 kg }
+      5     }
+      6 
+      7     meal "Breakfast" {
+      8         protein: 40 g
+      9     }
+     … +10 lines (ctrl+o to expand)
+
+● Bash(java -cp out fitlang.Main --dump-ast samples/_p2_expr_smoke.fl 2>&1)
+  ⎿  AthleteBlock
+       AthleteParams
+         bodyweight : 78.0 kg  [MASS]
+     … +19 lines (ctrl+o to expand)
+
+● Step 1 done. Parser/AST extension is clean — all four new forms parse
+  correctly:
+
+  - 80 kg / 2 → binary divide (Quantity / Number)
+  - 2 * 40 kg → binary multiply
+  - (80 kg + 200 g) - 5 kg → parens + same-family additive chain
+  - 0.25 kg/week → rate atom
+  - -0.25 kg/week → unary over rate atom
+  - 0.25 kg/week * 4 week → rate atom × time quantity (the §4.5.5 rule)
+
+  The k=2 rate-vs-divide peek lives inside parseAtom. Existing samples
+  regression-pass.
+
+  Left a samples/_p2_expr_smoke.fl as a temp test program (underscore-prefixed)
+  — useful once we have the type checker, can delete after.
+
+  Ready for step 2: the type checker (fitlang/TypeChecker.java)?
+
+✻ Cogitated for 2m 29s
+
+❯ perfect, rules are as I defined. go ahead                                     
+
+● Writing TypeChecker.java now. Single bottom-up pass keyed on node kind,
+  matching §4.5.8 pseudocode; checks expression types, record-slot families,
+  routine-call signatures, schedule-label resolution, no-shadowing, and
+  goal/direction consistency.
+
+● Write(src\fitlang\TypeChecker.java)
+  ⎿  Wrote 301 lines to src\fitlang\TypeChecker.java
+       2 package fitlang;
+       3 import fitlang.ast.Ast;
+       4 import fitlang.ast.Ast.UnitFamily;
+       5 import java.util.*;
+       6 
+       7 /**
+       8  * FitLang static type checker (§4.5).
+       9  *
+      10  * Single bottom-up pass over the AST. Collects diagnostics rath
+         er than throwing;
+     … +375 lines (ctrl+o to expand)
+
+● Now wire it into Main:
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(src\fitlang\Main.java)
+  ⎿  Added 24 lines, removed 7 lines
+      10   * FitLang entry point.
+      11   *
+      12   * Usage:
+      13 - *   fitlang <file.fl>             -- parse and report OK or er
+         -ror                                                            
+      14 - *   fitlang <file.fl> --dump-ast  -- parse and print the AST  
+      13 + *   fitlang <file.fl>             -- parse + type-check, repor
+         +t OK or errors                                                 
+      14 + *   fitlang <file.fl> --dump-ast  -- parse + type-check + prin
+         +t the AST                                                      
+      15 + *   fitlang <file.fl> --no-check  -- parse only (skip the type
+         + checker)                                                      
+      16   */
+      17  public final class Main {
+      18  
+      19      public static void main(String[] args) {
+      20          if (args.length == 0) {
+      20 -            System.err.println("Usage: fitlang <file.fl> [--dum
+         -p-ast]");                                                      
+      21 +            System.err.println("Usage: fitlang <file.fl> [--dum
+         +p-ast] [--no-check]");                                         
+      22              System.exit(1);
+      23          }
+      24  
+      25          String  filePath = null;
+      26          boolean dumpAst  = false;
+      27 +        boolean noCheck  = false;                              
+      28  
+      29          for (String arg : args) {
+      28 -            if (arg.equals("--dump-ast")) dumpAst = true;      
+      29 -            else                          filePath = arg;      
+      30 +            if      (arg.equals("--dump-ast")) dumpAst = true; 
+      31 +            else if (arg.equals("--no-check")) noCheck = true; 
+      32 +            else                               filePath = arg; 
+      33          }
+      34  
+      35          if (filePath == null) {
+     ...
+      50              List<Token>      tokens  = new Lexer(source).tokeni
+          ze();
+      51              Ast.AthleteBlock program = new Parser(tokens).parse
+          ();
+      52  
+      53 +            List<String> typeErrors = List.of();               
+      54 +            if (!noCheck) {                                    
+      55 +                typeErrors = new TypeChecker().check(program); 
+      56 +            }                                                  
+      57 +                                                               
+      58              if (dumpAst) {
+      59                  System.out.print(new AstDumper().dump(program))
+          ;
+      52 -            } else {                                           
+      53 -                System.out.println("OK: '" + filePath + "' pars
+         -ed successfully.");                                            
+      60              }
+      61  
+      62 +            if (!typeErrors.isEmpty()) {                       
+      63 +                System.err.println("Type errors in '" + filePat
+         +h + "':");                                                     
+      64 +                for (String e : typeErrors) System.err.println(
+         +"  - " + e);                                                   
+      65 +                System.exit(1);                                
+      66 +            }                                                  
+      67 +                                                               
+      68 +            if (!dumpAst) {                                    
+      69 +                System.out.println("OK: '" + filePath          
+      70 +                    + "' parsed" + (noCheck ? "" : " and type-c
+         +hecked") + " successfully.");                                  
+      71 +            }                                                  
+      72 +                                                               
+      73          } catch (FitLangException e) {
+      74              System.err.println("Parse error: " + e.getMessage()
+          );
+      75              System.exit(1);
+
+● Update(compile.bat)
+  ⎿  File must be read first
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(compile.bat)
+  ⎿  Added 1 line, removed 1 line
+      1  @echo off
+      2  if not exist out mkdir out
+      3 -javac -d out src\fitlang\FitLangException.java src\fitlang\Token
+        -.java src\fitlang\ast\Ast.java src\fitlang\Lexer.java src\fitlan
+        -g\Parser.java src\fitlang\AstDumper.java src\fitlang\Main.java  
+      3 +javac -d out src\fitlang\FitLangException.java src\fitlang\Token
+        +.java src\fitlang\ast\Ast.java src\fitlang\Lexer.java src\fitlan
+        +g\Parser.java src\fitlang\AstDumper.java src\fitlang\TypeChecker
+        +.java src\fitlang\Main.java                                     
+      4  if %errorlevel% equ 0 (
+      5      echo Build successful.
+      6  ) else (
+
+● Bash(javac -d out src/fitlang/FitLangException.java src/fitlang/Token.java
+      src/fitlang/ast/Ast.java src/fitlang/Lexer.java src/fitlang/Parser.java
+      src/fitlang/AstDum…)
+  ⎿  (No output)
+
+● Clean compile. Now run it on the existing valid samples and the smoke file:
+
+● Bash(for f in samples/valid_01_full.fl samples/valid_02_workout_only.fl
+      samples/valid_03_diet_only.fl samples/_p2_expr_smoke.fl; do echo "=== $f
+      ==="; java -cp out f…)
+  ⎿  === samples/valid_01_full.fl ===
+     Type errors in 'samples/valid_01_full.fl':
+       - goal direction 'lose' is inconsistent with athlete goal 'bulk' (�4
+     … +9 lines (ctrl+o to expand)
+
+● Type checker works — and it caught a real bug in valid_01_full.fl. The sample
+  has goal: bulk in the header but goal lose 0.5 kg/week in the rules. This is
+  exactly the inconsistency you already flagged in journal entry 07's "errors I
+  caught" — but the sample file itself was never updated, only the §4.4.11
+  worked example was rewritten. The checker is correctly enforcing §4.4.9.
+
+  Two follow-ups:
+
+  1. Fix the sample. Either change the header to goal: cut (so lose is
+  consistent), or change the rate to goal gain 0.5 kg/week. Which one?
+  2. Minor: encoding glitch. § shows as � on the Windows console (codepage
+  mismatch on stderr). I can either swap § → sec. in messages, or set
+  stdout/stderr to UTF-8 in Main. I'd lean toward UTF-8 in Main — clean fix.
+● User answered Claude's questions:
+  ⎿  · How should I fix valid_01_full.fl? → Change rate to `gain` (Recommended)
+     · Fix the §-encoding glitch? → Set stdout/stderr UTF-8 in Main 
+     (Recommended)
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(samples\valid_01_full.fl)
+  ⎿  Added 1 line, removed 1 line
+      14      }
+      15  
+      16      target protein >= 1.8 g per kg of bodyweight
+      17 -    goal   lose 0.5 kg/week                                    
+      17 +    goal   gain 0.5 kg/week                                    
+      18  
+      19      when goal: bulk {
+      20          target protein >= 2.0 g per kg of bodyweight
+
+● Update(src\fitlang\Main.java)
+  ⎿  Added 2 lines
+      2  
+      3  import fitlang.ast.Ast;
+      4  import java.io.IOException;
+      5 +import java.io.PrintStream;                                     
+      6 +import java.nio.charset.StandardCharsets;                       
+      7  import java.nio.file.Files;
+      8  import java.nio.file.Path;
+      9  import java.util.List;
+
+● Update(src\fitlang\Main.java)
+  ⎿  Added 4 lines
+      19  public final class Main {
+      20  
+      21      public static void main(String[] args) {
+      22 +        // Force UTF-8 on stdout/stderr so §, ⇓ etc. render cor
+         +rectly on Windows consoles.                                    
+      23 +        System.setOut(new PrintStream(System.out, true, Standar
+         +dCharsets.UTF_8));                                             
+      24 +        System.setErr(new PrintStream(System.err, true, Standar
+         +dCharsets.UTF_8));                                             
+      25 +                                                               
+      26          if (args.length == 0) {
+      27              System.err.println("Usage: fitlang <file.fl> [--dum
+          p-ast] [--no-check]");
+      28              System.exit(1);
+
+● Bash(javac -d out src/fitlang/FitLangException.java src/fitlang/Token.java
+      src/fitlang/ast/Ast.java src/fitlang/Lexer.java src/fitlang/Parser.java
+      src/fitlang/AstDum…)
+  ⎿  --- recheck valid samples ---
+     === samples/valid_01_full.fl ===
+     OK: 'samples/valid_01_full.fl' parsed and type-checked successfully.
+     … +8 lines (ctrl+o to expand)
+
+● All four pass. Now let me write a few targeted type-error programs to make
+  sure each rejection path actually fires — this doubles as the start of D3
+  evidence and E3 evidence.
+
+● Write(samples\_typeerr_cross_family.fl)
+  ⎿  Wrote 17 lines to samples\_typeerr_cross_family.fl
+      1 athlete(bodyweight: 78 kg, goal: bulk) {
+      2 
+      3     workout "Push Day" {
+      4         exercise "Bench" { sets: 4, reps: 6, weight: 80 kg }
+      5     }
+      6 
+      7     meal "Breakfast" {
+      8         protein: 40 g
+      9     }
+     … +9 lines (ctrl+o to expand)
+
+● Write(samples\_typeerr_rate_and_slots.fl)
+  ⎿  Wrote 16 lines to samples\_typeerr_rate_and_slots.fl
+       2 athlete(bodyweight: 78 kg, goal: bulk) {
+       3     workout "Push Day" {
+       4         exercise "Bench" { sets: 4, reps: 6, weight: 80 kcal }  
+       5         progress weight 2.5 kcal/week                           
+          # progress must be Rate(Mass,Time)
+       6     }
+       8     meal "Breakfast" {
+       9         protein: 40 kcal                                        
+          # macro must be Mass
+      10     }
+     … +12 lines (ctrl+o to expand)
+
+● Bash(echo "=== _typeerr_cross_family ==="; java -cp out fitlang.Main
+      samples/_typeerr_cross_family.fl 2>&1; echo; echo "===
+      _typeerr_rate_and_slots ==="; java -cp ou…)
+  ⎿  Error: Exit code 1
+     === _typeerr_cross_family ===
+     Type errors in 'samples/_typeerr_cross_family.fl':
+       - let bad_sum: operator '+' is not defined on Quantity(MASS) and 
+     Quantity(ENERGY) (§4.5.4–§4.5.5)
+       - let bad_div: operator '/' is not defined on Quantity(MASS) and 
+     Quantity(MASS) (§4.5.4–§4.5.5)
+       - let bad_mul: operator '*' is not defined on Quantity(MASS) and 
+     Quantity(MASS) (§4.5.4–§4.5.5)
+       - let bad_ident: unbound identifier 'unknownVar'
+
+     === _typeerr_rate_and_slots ===
+     Type errors in 'samples/_typeerr_rate_and_slots.fl':
+
+     … +6 lines (ctrl+o to expand)
+
+● All rejection paths fire with clean diagnostics. The § glyph also renders
+  correctly now.
+
+  Coverage of §4.5 rules, demonstrated:
+  - §4.5.4(1) cross-family + → rejected
+  - §4.5.4(2) same-family * / / → rejected (Mass², dimensionless)
+  - §4.5.5 wrong rate denom (g/kg) → rejected
+  - §4.4.9 bulk+lose → rejected (caught it in valid_01_full.fl before the fix)
+  - record slots (exercise weight, macro, target threshold, per-bodyweight unit)
+   → rejected when wrong family
+  - §4.6.3 unbound identifier → rejected
+  - schedule label resolution → rejected
+
+  P2 D2 status:
+  - ✅ Lexer / parser / AST (with §4.7 expression layer)
+  - ✅ Type checker (§4.5)
+  - ⏳ Interpreter (§4.4 operational semantics with multi-week plan N week)
+  - ⏳ --no-check / --dump-ast already wired; need --run to execute and print
+  the Plan
+
+  Journal/deliverables still owed:
+  - E3 entry — this very work is the experiment (AI implements type checker,
+  tested on ≥3 known-answer inputs). Easy to write while fresh.
+  - D3 needs ≥1 curated type-error program (we have two unpolished _typeerr_*
+  files).
+
+  Next thread? I'd suggest E3 entry now while the type-checker work is fresh in
+  this conversation, then interpreter. Or do interpreter first if you'd rather
+  keep the velocity on code.
+
+✻ Worked for 4m 2s
+
+❯ write the E3 entry                                                            
+
+  Read 1 file (ctrl+o to expand)
+
+● Write(docs\ai-journal\entries\09_2026-05-17_E3-type-checker-implementation.md)
+  ⎿  Wrote 95 lines to docs\ai-journal\entries\09_2026-05-17_E3-type-checke
+     r-implementation.md
+       2 entry: 09
+       3 date: 2026-05-17
+       4 phase: Type checker — E3 experiment (AI implements §4.5 type che
+         cker)
+       5 ai_tool: Claude Opus 4.7
+       7 ---
+       8 # Entry 09 — E3: AI-implemented type checker, tested on five kno
+         wn-answer inputs
+       9 
+      10 ## Goal
+     … +176 lines (ctrl+o to expand)
+
+● Drafted entry 09 at
+  docs/ai-journal/entries/09_2026-05-17_E3-type-checker-implementation.md.
+  Honest about the setup difference vs E2 (full project context here — would be
+  useless otherwise), honest about the result (no bugs, but flagged that this is
+   a transcription-grade task with directed tests), captured the one design call
+   I made on my own (when-decl branch-local let scoping) so you can decide if it
+   stands.
+
+  Per your authenticity rule, the Reflection is one factual sentence — replace
+  with your own takeaway if you want a fuller one.
+
+  Two things you should decide before submission:
+
+  1. When-decl scoping — I made the call that lets inside a when branch are
+  local to the branch. The journal flags this explicitly. If you'd rather let
+  them leak into the post-when rules (matching §4.4.10's "splice" reading more
+  literally), it's a one-line change in checkWhenDecl.
+  2. Promote the type-error samples — _typeerr_cross_family.fl and
+  _typeerr_rate_and_slots.fl are underscore-prefixed temporaries. For D3 you
+  need one curated type-error program. Want me to merge them into a single,
+  well-documented invalid_typeerror.fl?
+
+  Otherwise, next thread is the interpreter. What's the call?
+
+✻ Cogitated for 1m 17s
+
+※ recap: Building FitLang P2: parser/AST extended to §4.7, type checker done and tested clean on 5 inputs, E2 and E3 journal entries written. Next: write the §4.4 interpreter. (disable recaps in /config)
+
+❯ what about when-decl scoping I didn't get that?                               
+
+● The question is: if you write a let inside a when branch, can later rules 
+  (outside the when) see it?
+
+  Concretely, this program:
+
+  when goal: bulk {
+      let surplusKcal = 300 kcal
+      target protein >= 2.0 g per kg of bodyweight
+  } else {
+      target protein >= 1.6 g per kg of bodyweight
+  }
+
+  # Can a target down here reference `surplusKcal`?
+  target carbs >= surplusKcal   # ← is this legal or unbound?
+
+  Two defensible readings of §4.4.10:
+
+  1. Branch-local (what I implemented). surplusKcal is scoped to the then-branch
+   only. After the when-decl ends, the env is restored. Code outside the when
+  sees the env as it was before. Result: surplusKcal is unbound in the trailing
+  target carbs. Type error.
+  2. Splice-and-leak (the literal reading of §4.4.10). The spec says: "the 
+  surviving rule list is spliced into the enclosing <rules-section>." If you
+  take that literally, then after static dispatch the program is equivalent to:
+
+  let surplusKcal = 300 kcal      # spliced from then-branch
+  target protein >= 2.0 g per kg of bodyweight
+  target carbs >= surplusKcal      # ← now legal
+
+  2. So surplusKcal does leak out, but only along the surviving branch — at
+  compile time, the checker has already picked one branch via the goal mode.
+
+  Why this matters at all: §4.4.10 says when is static — the dispatch value
+  (goal mode) is a literal in the header, known at check time. So technically
+  the checker could pick the surviving branch and check only that one, with
+  bindings leaking into the trailing rules. That's reading (2).
+
+  I went with reading (1) because:
+  - It type-checks both branches (catches bugs in the dead branch — a future
+  header change wouldn't suddenly expose a broken else).
+  - Java treats if (false) { ... } the same way (still type-checked).
+  - Conservative — never silently exposes a name from a branch that didn't run.
+
+  But reading (2) is closer to what §4.4.10's "splice" wording promises, and is
+  consistent with §4.4.10 calling this "the operational use of compile-time 
+  dispatch."
+
+  Quiz risk: if the grader points at §4.4.10's "splice" sentence and asks "so a
+  let inside the surviving branch is visible after the when?", reading (1) gives
+   the answer "no, branch-local" — which contradicts the literal spec. Reading
+  (2) matches the spec but means the checker has to commit to one branch.
+
+  Which one do you want? My recommendation, given the user-defendability
+  priority: match the spec. Pick the surviving branch via the header goal, check
+   only that branch, let its bindings leak. Update §4.4.10 if needed (it's
+  already consistent with this reading) and the checker becomes a few lines
+  simpler too.
+
+✻ Baked for 18s
+
+❯ so matching the spec, would make the let bound outside the when branch if the 
+   branch survived right?                                                       
+
+● Exactly. Spec-matching behavior:
+
+  - At check time, look at the athlete header goal.
+  - Pick the surviving branch (then if goal matches the when mode, else
+  otherwise — or nothing if no else).
+  - Check only that branch.
+  - Its lets extend the env going forward; later rules can reference them.
+  - The dead branch is never checked.
+
+  So:
+
+  athlete(bodyweight: 78 kg, goal: bulk) {
+      ...
+      when goal: bulk {
+          let surplusKcal = 300 kcal
+      } else {
+          let deficitKcal = 500 kcal
+      }
+      target carbs >= surplusKcal g     # ← LEGAL  (then-branch survived)
+      target carbs >= deficitKcal g     # ← UNBOUND (else-branch dead, never
+  checked)
+  }
+
+  And if the header were goal: cut, the opposite — deficitKcal would be bound,
+  surplusKcal would not exist at all.
+
+  One consequence worth knowing: a type error inside the dead branch is not a
+  compile error under this reading. If you wrote let bad = 80 kg + 200 kcal
+  inside the dead else, the program type-checks fine. Some would call that a
+  feature (matches Sebesta §8.1 static-if behavior — the dead code is dead, full
+   stop), others would call it a footgun. Sebesta-defendable either way — but
+  you should be ready to say which side you're on.
+
+  Want me to flip the checker to this reading?
+
+✻ Crunched for 11s
+
+❯ I guess let's mathc the spec, I liked that behaviour, and you may merge the   
+  two programs you mentioned about earlier                                      
+
+● Update(src\fitlang\TypeChecker.java)
+  ⎿  Added 6 lines, removed 3 lines
+      27   *  10. No shadowing in the let-environment (§4.6.3).
+      28   *  11. The full arithmetic algebra of §4.5.4–§4.5.5 applies in
+          side expressions.
+      29   *
+      30 - * When-decl branches are both type-checked (static dispatch el
+         -iminates the dead                                              
+      31 - * branch at evaluation time, but both branches must be well-ty
+         -ped). Let-bindings                                             
+      32 - * introduced inside a when-branch are scoped to that branch.  
+      30 + * When-decl branches are dispatched **statically** (§4.4.10): 
+         +the checker                                                    
+      31 + * picks the surviving branch using the athlete header `goal`, 
+         +type-checks only                                               
+      32 + * that branch, and lets its bindings leak into the rules that 
+         +follow. This                                                   
+      33 + * matches the spec's "splice the surviving rule list into the 
+         +enclosing                                                      
+      34 + * <rules-section>" wording. The dead branch is never checked —
+         + a type error                                                  
+      35 + * inside it is not a compile error.                           
+      36   */
+      37  public final class TypeChecker {
+      38  
+● Update(src\fitlang\TypeChecker.java)
+  ⎿  Added 8 lines, removed 8 lines
+      215      }
+      216  
+      217      private void checkWhenDecl(Ast.WhenDecl w, Ast.GoalMode go
+           alMode) {
+      218 -        // Snapshot the env; each branch sees a clean copy, ne
+          -ither leaks out.                                              
+      219 -        Map<String, FType> outer = new LinkedHashMap<>(env);  
+      220 -        for (Ast.RuleDecl r : w.thenRules) checkRuleDecl(r, go
+          -alMode);                                                      
+      221 -        env.clear(); env.putAll(outer);                       
+      222 -        if (w.elseRules != null) {                            
+      223 -            for (Ast.RuleDecl r : w.elseRules) checkRuleDecl(r
+          -, goalMode);                                                  
+      224 -            env.clear(); env.putAll(outer);                   
+      225 -        }                                                     
+      218 +        // §4.4.10: static dispatch — pick the surviving branc
+          +h via the athlete                                             
+      219 +        // header `goal` and type-check only that branch. Its 
+          +let-bindings then                                             
+      220 +        // extend the env for the rules that follow (the "spli
+          +ce" semantics).                                               
+      221 +        // The dead branch is never checked.                  
+      222 +        List<Ast.RuleDecl> surviving =                        
+      223 +            (w.mode == goalMode) ? w.thenRules : w.elseRules; 
+      224 +        if (surviving == null) return;             // dead els
+          +e with no rules                                               
+      225 +        for (Ast.RuleDecl r : surviving) checkRuleDecl(r, goal
+          +Mode);                                                        
+      226      }
+      227  
+      228      private void checkSchedule(Ast.ScheduleStmt s) {
+
+● Now merge the two type-error programs and delete the temps:
+
+● Write(samples\invalid_typeerror.fl)
+  ⎿  Wrote 37 lines to samples\invalid_typeerror.fl
+         ent marks oneely ill-typed FitLang program — every numbered comm
+         r D3 evidencehe §4.5 type checker is expected to report. Used fo
+       4 # of type-checker behaviour and for E3's negative test inputs.
+       5 # Expected diagnostics (10 total):
+         .5.6 + §4.5.4)e weight is Energy, not Mass                   (§4
+         .5.5). progress rate has Energy numerator, not Mass          (§4
+       8 #   3. meal macro is Energy, not Mass                        (§4
+       9 #   4. cross-family addition: Mass + Energy                  (§4
+      10 #   5. same-family division: Mass / Mass (would yield Number) (§
+         4.5.4 rule 2)
+     … +40 lines (ctrl+o to expand)
+
+● Bash(rm samples/_typeerr_cross_family.fl samples/_typeerr_rate_and_slots.fl
+      samples/_p2_expr_smoke.fl)
+  ⎿  Done
+
+● Bash(javac -d out src/fitlang/FitLangException.java src/fitlang/Token.java
+      src/fitlang/ast/Ast.java src/fitlang/Lexer.java src/fitlang/Parser.java
+      src/fitlang/AstDum…)
+  ⎿  Error: Exit code 1
+     --- valid samples ---
+     === samples/valid_01_full.fl ===
+     OK: 'samples/valid_01_full.fl' parsed and type-checked successfully.
+     === samples/valid_02_workout_only.fl ===
+     OK: 'samples/valid_02_workout_only.fl' parsed and type-checked 
+     successfully.
+     === samples/valid_03_diet_only.fl ===
+     OK: 'samples/valid_03_diet_only.fl' parsed and type-checked successfully.
+     --- invalid sample ---
+     Type errors in 'samples/invalid_typeerror.fl':
+
+     … +10 lines (ctrl+o to expand)
+
+● All 10 expected diagnostics fire in order; three valid samples still pass. Now
+   updating entry 09 with the scoping decision (per authenticity, appending
+  rather than rewriting):
+
+● Update(docs\ai-journal\entries\09_2026-05-17_E3-type-checker-implementation.md
+        )
+  ⎿  Added 8 lines
+       90  - **Real bug the checker caught** in `samples/valid_01_full.fl
+           `: bulk header + `lose` direction. This is the §4.4.9 consiste
+           ncy rule firing on a sample that had been in the repo since Pa
+           rt 1 with the inconsistency unfixed. The journal of entry 07 h
+           ad already noted it; the type checker now enforces it.
+       91  - **One design call worth re-examining**: the when-decl branch
+           -local let scoping (see §"When-decl scoping" above). Claude im
+           plemented this without checking with me first. The choice is d
+           efensible but not the only defensible reading of §4.4.10.
+       92  
+       93 +## Addendum (same session, after the rest of the entry was dra
+          +fted)                                                         
+       94 +                                                              
+       95 +I asked Claude to spell out the when-decl scoping question. Af
+          +ter seeing both readings, I picked the **splice-and-leak** rea
+          +ding (option 2): pick the surviving branch via the athlete hea
+          +der `goal`, type-check only that branch, let its bindings exte
+          +nd the env for the rules that follow. This matches §4.4.10's l
+          +iteral "splice" wording. A consequence I am explicitly accepti
+          +ng: **type errors in the dead branch are not compile errors** 
+          +— Sebesta §8.1 static-if behaviour, defendable on those ground
+          +s.                                                            
+       96 +                                                              
+       97 +Claude rewrote `checkWhenDecl` to this reading; the file-level
+          + Javadoc was also updated. All three valid samples and the mer
+          +ged `samples/invalid_typeerror.fl` (10 deliberate type errors)
+          + still pass / fail as expected after the change.              
+       98 +                                                              
+       99 +Also merged the two `_typeerr_*` temp programs into `samples/i
+          +nvalid_typeerror.fl` with numbered comments mapping each error
+          + to the §4.5 / §4.4 rule it violates. This is the D3 type-erro
+          +r program.                                                    
+      100 +                                                              
+      101  ## Reflection
+      102  
+      103  E3 setup ran with full context (parser/AST/spec available) and
+            the type checker came out clean on the first compile across f
+           ive known-answer inputs. The honest caveat is that this is a t
+           ranscription-grade task — §4.5.8 spells out the algorithm — an
+           d the test set is directed; errors of omission would not show 
+           up here.
+
+● Done. To recap the diff:
+
+  - TypeChecker.checkWhenDecl now picks the surviving branch using the athlete
+  goal and lets its bindings flow into the rules that follow. Dead branch is
+  never checked — Sebesta §8.1 static-if.
+  - File Javadoc updated to describe the new behaviour.
+  - samples/invalid_typeerror.fl is the merged, well-documented D3 type-error
+  program — each numbered comment maps an error to the §4.5/§4.4 rule it
+  violates. The two _typeerr_* temps and the _p2_expr_smoke temp are gone.
+  - Entry 09 has an addendum recording your decision and the resulting checker
+  change.
+
+  P2 D2 status:
+  - ✅ Lexer / parser / AST (full §4.7 expression layer)
+  - ✅ Type checker (§4.5, with §4.4.10 static when matching the spec)
+  - ✅ D3 type-error program ready
+  - ⏳ Interpreter (§4.4 operational semantics, multi-week plan N week)
+
+  Interpreter next, or break here?
+
+✻ Cooked for 1m 9s
+
+❯ I think we will stop for today here, I will fill the reflection sections and  
+  commit, do we need to create extra entries?                                   
+
+● Yes, today produced two more pieces of work that aren't in 08/09 and deserve
+  their own entry:
+
+  1. D1 P2 review fixes — caught the duplicate §4.8 stub, the §4.5.8 pseudocode
+  that silently allowed Rate+Rate (contradicted §4.5.5), and the unintroduced ⇝
+  notation. Real bugs in the spec you wrote yourselves yesterday, found by
+  reading critically with the AI's help.
+  2. Parser/AST extension to the full §4.7 expression layer — UnaryExpr,
+  RateExpr, the precedence-stratified parser, the k=2 rate-vs-divide peek in
+  parseAtom. Non-trivial AI-driven code work.
+
+  Neither fits cleanly inside 08 or 09. I'd combine them into one entry — both
+  happened in the same session, both are P2-design-tightening work that sets up
+  the type checker.
+
+  Also worth noting the P2 entry budget: course handout asks for ≥6 more entries
+   in Part 2. After today you have 07, 08, 09 = 3. Adding entry 10 today gets
+  you to 4. You'd want 2 more before 22 May (interpreter session + D3/D5 wrap-up
+   are natural candidates).
+
+  Want me to draft entry 10 now (D1 review + parser extension)? Quick — most of
+  the material is already in this conversation.
+
+✻ Sautéed for 26s
+
+❯ yes please                                                                    
+
+● Write(docs\ai-journal\entries\10_2026-05-17_D1-review-and-parser-extension.md)
+  ⎿  Wrote 115 lines to docs\ai-journal\entries\10_2026-05-17_D1-review-and
+     -parser-extension.md
+       2 entry: 10
+       3 date: 2026-05-17
+       4 phase: Design review (§4.4/§4.5/§4.7/§4.8) + Parser extension to
+          full §4.7 expression layer
+       5 ai_tool: Claude Opus 4.7
+       7 ---
+       8 # Entry 10 — D1 P2 review fixes + §4.7 expression-layer parser e
+         xtension
+       9 
+      10 ## Goal
+     … +187 lines (ctrl+o to expand)
+
+● Entry 10 drafted at
+  docs/ai-journal/entries/10_2026-05-17_D1-review-and-parser-extension.md.
+  Covers both the D1 P2 review (duplicate header, Rate+Rate pseudocode bug, ⇝
+  notation gap, four defendability flags) and the §4.7 expression-layer parser
+  extension (grammar, AST additions, the rate-vs-divide disambiguation decision,
+   smoke test).
+
+  Reflection left as (to fill in) per your authenticity rule.
+
+  Journal count after today: 4 entries (07–10). Need 2 more before 22 May —
+  natural candidates are an interpreter session entry and a D3/D5 wrap-up entry.
+
+  Want a quick sanity check before you commit? git status and a heads-up on
+  what's staged would be the next safe step.
+
+✻ Brewed for 57s
+
+※ recap: P2 D2 is mostly built — parser/AST extended to §4.7, type checker implemented, D3 type-error program ready, journal entries 08, 09, 10 drafted. Next action is to fill the Reflection sections and commit, then start the interpreter.
+
+❯ done let's commit                                                             
+
+● Bash(git status && echo "---" && git log --oneline -5)
+  ⎿  On branch main
+     Your branch is up to date with 'origin/main'.
+     … +20 lines (ctrl+o to expand)
+
+● Lots going on. Two reasonable shapes:
+
+  1. One commit covering all of today's P2 work.
+  2. Split into logical commits — e.g.:
+    - docs: add Sebesta chapters 6–9
+    - D1: tighten §4.5.8 +/- rule, dedupe §4.8, introduce ⇝ judgement in §4.4.1
+    - parser, ast: extend expression layer to full §4.7 grammar
+    - checker: add §4.5 type checker, wire into Main, fix bulk/lose in valid_01,
+   force UTF-8 console
+    - samples: add invalid_typeerror.fl for D3 evidence
+    - journal: add entries 08 (E2), 09 (E3), 10 (D1-review + parser)
+
+● User answered Claude's questions:
+  ⎿  · Commit shape? → One big P2 commit
+
+● Bash(git add docs/BOOK/Concepts_of_Programming_Languages-ch6.pdf
+      docs/BOOK/Concepts_of_Programming_Languages-ch7.pdf
+      docs/BOOK/Concepts_of_Programming_Languages-ch8.…)
+  ⎿  warning: in the working copy of 'compile.bat', LF will be replaced by
+     CRLF the next time Git touches it
+     warning: in the working copy of 'docs/design/D1.md', LF will be replac
+     … +36 lines (ctrl+o to expand)
+
+● Bash(git commit -m "$(cat <<'EOF'
+      P2: extend expression layer, add §4.5 type checker, journal E2+E3…)
+  ⎿  [main f8e44a3] P2: extend expression layer, add §4.5 type checker, jou
+     rnal E2+E3
+      19 files changed, 1550 insertions(+), 31 deletions(-)
+     … +17 lines (ctrl+o to expand)
+
+● Committed as f8e44a3. No Claude attribution, no Co-Authored-By trailer.
+
+  Good place to stop. Tomorrow: interpreter (§4.4 operational semantics,
+  multi-week plan N week) + the remaining ≥2 P2 journal entries.
+✻ Sautéed for 51s
