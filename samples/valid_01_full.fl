@@ -14,7 +14,7 @@ athlete(bodyweight: 78 kg, goal: bulk) {
     }
 
     target protein >= 1.8 g per kg of bodyweight
-    goal   lose 0.5 kg/week
+    goal   gain 0.5 kg/week
 
     when goal: bulk {
         target protein >= 2.0 g per kg of bodyweight

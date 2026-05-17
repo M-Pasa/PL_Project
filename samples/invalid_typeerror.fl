@@ -1,0 +1,37 @@
+# A deliberately ill-typed FitLang program — every numbered comment marks one
+# violation the §4.5 type checker is expected to report. Used for D3 evidence
+# of type-checker behaviour and for E3's negative test inputs.
+#
+# Expected diagnostics (10 total):
+#   1. exercise weight is Energy, not Mass                   (§4.5.6 + §4.5.4)
+#   2. progress rate has Energy numerator, not Mass          (§4.5.5)
+#   3. meal macro is Energy, not Mass                        (§4.5.6)
+#   4. cross-family addition: Mass + Energy                  (§4.5.4 rule 2)
+#   5. same-family division: Mass / Mass (would yield Number) (§4.5.4 rule 2)
+#   6. same-family multiplication: Mass * Mass (would yield Mass²) (§4.5.4 rule 2)
+#   7. unbound identifier on let RHS                          (§4.6.3)
+#   8. target "per UNIT of bodyweight" UNIT is Energy, not Mass (§4.4.9)
+#   9. goal-rate has Mass denominator, not Time               (§4.5.5)
+#  10. schedule references an undeclared meal label           (§4.4.8)
+
+athlete(bodyweight: 78 kg, goal: bulk) {
+
+    workout "Push Day" {
+        exercise "Bench" { sets: 4, reps: 6, weight: 80 kcal }   # 1
+        progress weight 2.5 kcal/week                            # 2
+    }
+
+    meal "Breakfast" {
+        protein: 40 kcal                                         # 3
+    }
+
+    let bad_sum   = 80 kg + 200 kcal                             # 4
+    let bad_div   = 80 kg / 2 kg                                 # 5
+    let bad_mul   = 80 kg * 2 kg                                 # 6
+    let bad_ident = unknownVar                                   # 7
+
+    target protein >= 1.8 g per kcal of bodyweight               # 8
+    goal gain 0.25 g/kg                                          # 9
+
+    plan week with workouts: ["Push Day"], meals: ["Nope"]       # 10
+}

@@ -88,7 +88,7 @@ public final class Ast {
 
     public static final class BinaryExpr implements Expr {
         public final Expr   left;
-        public final String op;   // "+" or "-"
+        public final String op;   // "+", "-", "*", "/"
         public final Expr   right;
 
         public BinaryExpr(Expr left, String op, Expr right) {
@@ -96,6 +96,21 @@ public final class Ast {
             this.op    = op;
             this.right = right;
         }
+    }
+
+    public static final class UnaryExpr implements Expr {
+        public final String op;   // "-"
+        public final Expr   operand;
+
+        public UnaryExpr(String op, Expr operand) {
+            this.op      = op;
+            this.operand = operand;
+        }
+    }
+
+    public static final class RateExpr implements Expr {
+        public final Rate rate;
+        public RateExpr(Rate rate) { this.rate = rate; }
     }
 
     // ── Declaration nodes ────────────────────────────────────────────────────

@@ -490,34 +490,85 @@ public final class Parser {
             denomTok.lexeme, Ast.familyOf(denomTok.type));
     }
 
-    // <expression> → <term> { <add-op> <term> }
-    private Ast.Expr parseExpression() {
-        Ast.Expr left = parseTerm();
+    // <expression> → <add-expr>                                    (§4.7.1)
+    // <add-expr>   → <mul-expr> { ("+" | "-") <mul-expr> }
+    // <mul-expr>   → <unary>    { ("*" | "/") <unary>    }
+    // <unary>      → [ "-" ] <atom>
+    // <atom>       → NUM_LIT [ UNIT [ "/" UNIT ] ]                  // scalar | quantity | rate
+    //              | IDENT
+    //              | "(" <expression> ")"
+    //
+    // Rate/divide disambiguation lives inside parseAtom: once we've consumed
+    // NUM_LIT UNIT, we peek two tokens — if (SLASH, UNIT), it's a rate atom;
+    // otherwise the SLASH belongs to the enclosing <mul-expr> as binary `/`.
+
+    private Ast.Expr parseExpression() { return parseAddExpr(); }
+
+    private Ast.Expr parseAddExpr() {
+        Ast.Expr left = parseMulExpr();
         while (check(Token.Type.PLUS) || check(Token.Type.MINUS)) {
             String op    = advance().lexeme;
-            Ast.Expr right = parseTerm();
+            Ast.Expr right = parseMulExpr();
             left = new Ast.BinaryExpr(left, op, right);
         }
         return left;
     }
 
-    // <term> → <quantity> | NUM_LIT | IDENT
-    // Disambiguate NUM_LIT vs <quantity> by looking one token ahead.
-    private Ast.Expr parseTerm() {
+    private Ast.Expr parseMulExpr() {
+        Ast.Expr left = parseUnary();
+        while (check(Token.Type.STAR) || check(Token.Type.SLASH)) {
+            String op    = advance().lexeme;
+            Ast.Expr right = parseUnary();
+            left = new Ast.BinaryExpr(left, op, right);
+        }
+        return left;
+    }
+
+    private Ast.Expr parseUnary() {
+        if (check(Token.Type.MINUS)) {
+            advance();
+            return new Ast.UnaryExpr("-", parseAtom());
+        }
+        return parseAtom();
+    }
+
+    private Ast.Expr parseAtom() {
         Token t = peek();
         if (t.type == Token.Type.NUM_LIT) {
-            // quantity if the next token is a unit, otherwise bare number
-            boolean nextIsUnit = (pos + 1 < tokens.size())
-                && isUnit(tokens.get(pos + 1).type);
-            if (nextIsUnit) return new Ast.QuantityExpr(parseQuantity());
             advance();
-            return new Ast.NumExpr(Double.parseDouble(t.lexeme));
+            double value = Double.parseDouble(t.lexeme);
+            // Bare number?
+            if (!isUnit(peek().type))
+                return new Ast.NumExpr(value);
+            // Has a unit — quantity or rate.
+            Token numerTok = advance();
+            // Peek for the rate continuation: SLASH then UNIT.
+            boolean isRate = check(Token.Type.SLASH)
+                && (pos + 1 < tokens.size())
+                && isUnit(tokens.get(pos + 1).type);
+            if (isRate) {
+                advance(); // consume SLASH
+                Token denomTok = advance(); // the UNIT
+                return new Ast.RateExpr(new Ast.Rate(
+                    value,
+                    numerTok.lexeme, Ast.familyOf(numerTok.type),
+                    denomTok.lexeme, Ast.familyOf(denomTok.type)));
+            }
+            return new Ast.QuantityExpr(new Ast.Quantity(
+                value, numerTok.lexeme, Ast.familyOf(numerTok.type)));
         }
         if (t.type == Token.Type.IDENT) {
             advance();
             return new Ast.IdentExpr(t.lexeme);
         }
+        if (t.type == Token.Type.LPAREN) {
+            advance();
+            Ast.Expr inner = parseExpression();
+            expect(Token.Type.RPAREN);
+            return inner;
+        }
         throw new FitLangException(
-            "Expected expression term (number, quantity, or identifier)", t.line, t.col);
+            "Expected expression atom (number, quantity, rate, identifier, or '(' )",
+            t.line, t.col);
     }
 }

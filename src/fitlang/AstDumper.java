@@ -141,8 +141,13 @@ public final class AstDumper {
 
     private String exprStr(Ast.Expr e) {
         if (e instanceof Ast.QuantityExpr) return ((Ast.QuantityExpr) e).qty.toString();
+        if (e instanceof Ast.RateExpr)     return ((Ast.RateExpr) e).rate.toString();
         if (e instanceof Ast.NumExpr)      return String.valueOf(((Ast.NumExpr) e).value);
         if (e instanceof Ast.IdentExpr)    return ((Ast.IdentExpr) e).name;
+        if (e instanceof Ast.UnaryExpr) {
+            Ast.UnaryExpr u = (Ast.UnaryExpr) e;
+            return "(" + u.op + exprStr(u.operand) + ")";
+        }
         if (e instanceof Ast.BinaryExpr) {
             Ast.BinaryExpr b = (Ast.BinaryExpr) e;
             return "(" + exprStr(b.left) + " " + b.op + " " + exprStr(b.right) + ")";
