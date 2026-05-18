@@ -14,6 +14,7 @@ import java.util.List;
  * Usage:
  *   fitlang <file.fl>             -- parse + type-check, report OK or errors
  *   fitlang <file.fl> --dump-ast  -- parse + type-check + print the AST
+ *   fitlang <file.fl> --run       -- parse + type-check + interpret, print Plan
  *   fitlang <file.fl> --no-check  -- parse only (skip the type checker)
  */
 public final class Main {
@@ -24,16 +25,18 @@ public final class Main {
         System.setErr(new PrintStream(System.err, true, StandardCharsets.UTF_8));
 
         if (args.length == 0) {
-            System.err.println("Usage: fitlang <file.fl> [--dump-ast] [--no-check]");
+            System.err.println("Usage: fitlang <file.fl> [--dump-ast] [--run] [--no-check]");
             System.exit(1);
         }
 
         String  filePath = null;
         boolean dumpAst  = false;
+        boolean run      = false;
         boolean noCheck  = false;
 
         for (String arg : args) {
             if      (arg.equals("--dump-ast")) dumpAst = true;
+            else if (arg.equals("--run"))      run     = true;
             else if (arg.equals("--no-check")) noCheck = true;
             else                               filePath = arg;
         }
@@ -71,7 +74,10 @@ public final class Main {
                 System.exit(1);
             }
 
-            if (!dumpAst) {
+            if (run) {
+                Interpreter.Plan plan = new Interpreter().run(program);
+                System.out.print(plan);
+            } else if (!dumpAst) {
                 System.out.println("OK: '" + filePath
                     + "' parsed" + (noCheck ? "" : " and type-checked") + " successfully.");
             }
