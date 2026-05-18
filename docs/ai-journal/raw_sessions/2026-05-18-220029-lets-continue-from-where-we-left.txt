@@ -1,0 +1,1661 @@
+ ▐▛███▜▌   Claude Code v2.1.143
+▝▜█████▛▘  Opus 4.7 · Claude Pro
+  ▘▘ ▝▝    ~\OneDrive\Documents\Projects\PL\PL_Project
+
+❯ Let's continue from where we left                                             
+
+  Listed 1 directory (ctrl+o to expand)
+
+● Bash(git log --oneline -15 && echo "---" && ls docs/)
+  ⎿  667aea5 Added the first raw session for 18.05.2026
+     442855b Add Ch.6-9 project guide md and its raw creation chat
+     9a838d5 P2: add §4.4 tree-walking interpreter and --run flag
+     … +13 lines (ctrl+o to expand)
+
+  Read 1 file, listed 2 directories (ctrl+o to expand)
+
+● Bash(git status && echo "---" && ls src/fitlang/)
+  ⎿  On branch main
+     Your branch is up to date with 'origin/main'.
+     … +11 lines (ctrl+o to expand)
+
+  Searched for 2 patterns, read 1 file, listed 1 directory (ctrl+o to expand)
+
+● Looking at last session: §4.4 interpreter shipped, journal entry 11
+  committed/pushed, tree clean. Entry 11 flagged two deferred items: plan N week
+   parser/AST extension (lights up the multi-week loop) and §4.7 
+  expression-bodied slots (widens exercise weight). §4.8 Design Rationale also
+  still owed for P2.
+
+● User answered Claude's questions:
+  ⎿  · What do you want to tackle next? → plan N week extension
+
+  Searched for 2 patterns, read 6 files, listed 1 directory (ctrl+o to expand)
+
+● Now to implement. Starting with the AST:
+
+● Update(src\fitlang\ast\Ast.java)
+  ⎿  Added 3 lines, removed 1 line
+      266      // ── Schedule (§4.3 <schedule-stmt>) ────────────────────
+           ──────────────────
+      267  
+      268      public static final class ScheduleStmt {
+      269 +        public final int          weeks;    // §4.4.8 N; 1 if 
+          +"plan week …" with no NUM_LIT                                 
+      270          public final List<String> workouts; // null if workout
+           s clause absent
+      271          public final List<String> meals;    // null if meals c
+           lause absent
+      272  
+      272 -        public ScheduleStmt(List<String> workouts, List<String
+          -> meals) {                                                    
+      273 +        public ScheduleStmt(int weeks, List<String> workouts, 
+          +List<String> meals) {                                         
+      274 +            this.weeks    = weeks;                            
+      275              this.workouts = workouts;
+      276              this.meals    = meals;
+      277          }
+
+● Update(src\fitlang\Parser.java)
+  ⎿  Added 7 lines, removed 3 lines
+      418          return new Ast.LetDecl(name, parseExpression());
+      419      }
+      420  
+      421 -    // <schedule-stmt> → "plan" "week" "with" <schedule-clause
+          -s>                                                            
+      421 +    // <schedule-stmt> → "plan" [ NUM_LIT ] "week" "with" <sch
+          +edule-clauses>                                                
+      422      private Ast.ScheduleStmt parseScheduleStmt() {
+      423          expect(Token.Type.PLAN);
+      424 +        int weeks = 1;                                        
+      425 +        if (check(Token.Type.NUM_LIT)) {                      
+      426 +            weeks = parsePositiveInt(advance());              
+      427 +        }                                                     
+      428          expect(Token.Type.WEEK);
+      429          expect(Token.Type.WITH);
+      426 -        return parseScheduleClauses();                        
+      430 +        return parseScheduleClauses(weeks);                   
+      431      }
+      432  
+      433      // <schedule-clauses>
+      434      //   → "workouts" ":" <name-list> [ "," "meals" ":" <name-
+           list> ]
+      435      //   | "meals"    ":" <name-list>
+      432 -    private Ast.ScheduleStmt parseScheduleClauses() {         
+      436 +    private Ast.ScheduleStmt parseScheduleClauses(int weeks) {
+      437          List<String> workouts = null;
+      438          List<String> meals    = null;
+      439  
+
+● Update(src\fitlang\Parser.java)
+  ⎿  Added 1 line, removed 1 line
+      456              throw new FitLangException(
+      457                  "Expected 'workouts' or 'meals' clause in plan
+            statement", t.line, t.col);
+      458          }
+      459 -        return new Ast.ScheduleStmt(workouts, meals);         
+      459 +        return new Ast.ScheduleStmt(weeks, workouts, meals);  
+      460      }
+      461  
+      462      // <name-list> → "[" STRING_LIT { "," STRING_LIT } "]"
+
+● Update(src\fitlang\AstDumper.java)
+  ⎿  Added 1 line
+      158      private void dumpScheduleStmt(Ast.ScheduleStmt s) {
+      159          line("ScheduleStmt");
+      160          push();
+      161 +        line("weeks    : " + s.weeks);                        
+      162          if (s.workouts != null) line("workouts : " + fmtList(s
+           .workouts));
+      163          if (s.meals    != null) line("meals    : " + fmtList(s
+           .meals));
+      164          pop();
+
+● Now the interpreter — apply per-week loop with projected bw and exercise
+  progression:
+
+● Update(src\fitlang\Interpreter.java)
+  ⎿  Added 6 lines, removed 4 lines
+      18   * not per family — bodyweight prints in kg, macros in g, etc. 
+          (§4.4 print
+      19   * policy decided 2026-05-18; see D4 entry).
+      20   *
+      21 - * The current parser produces "plan week" with no integer (§4.
+         -4.2's N=1                                                      
+      22 - * degenerate case); the interpreter materialises a single-week
+         - Plan. The                                                     
+      23 - * per-week loop is a no-op fold at N=1 but the structure is in
+         - place for a                                                   
+      24 - * future "plan N week" production.                            
+      21 + * Multi-week projection (§4.4.8): the schedule carries an N fr
+         +om                                                             
+      22 + * `plan [N] week …` (default N=1). For each week k ∈ 1..N the 
+         +interpreter                                                    
+      23 + * projects bodyweight as bw₀ ± goalRate × ((k-1) week) and app
+         +lies any                                                       
+      24 + * workout's `progress weight r` per-exercise as w₀ + r × ((k-1
+         +) week). Meals                                                 
+      25 + * are constant across weeks (§4.4.8) and targets recompute aga
+         +inst each                                                      
+      26 + * week's projected bodyweight.                                
+      27   */
+      28  public final class Interpreter {
+      29  
+
+● Update(src\fitlang\Interpreter.java)
+  ⎿  Added 30 lines, removed 20 lines
+      153              }
+      154          }
+      155  
+      156 +        int N = b.schedule.weeks;                             
+      157          Plan plan = new Plan();
+      158          plan.athleteBodyweight = (MassV) liftQuantity(b.params
+           .bodyweight);
+      159          plan.athleteGoal       = b.params.goal;
+      159 -        plan.horizon           = new TimeV(toCanonical(1.0, "w
+          -eek")); // N=1 degenerate case                                
+      160 +        plan.horizon           = new TimeV(toCanonical(N, "wee
+          +k"));                                                         
+      161          plan.goalRate          = findGoalRate(liveRules);
+      162  
+      162 -        // Single-week schedule (§4.4.8 with N=1).            
+      163 -        Plan.Week week = new Plan.Week();                     
+      164 -        week.index      = 1;                                  
+      165 -        week.bodyweight = plan.athleteBodyweight;             
+      163 +        // §4.4.8: signed kg/s change per second of elapsed ti
+          +me. lose negates.                                             
+      164 +        double bwChangePerSec = 0.0;                          
+      165 +        if (plan.goalRate != null) {                          
+      166 +            int sign = (plan.goalRate.direction == Ast.Directi
+          +on.LOSE) ? -1 : +1;                                           
+      167 +            bwChangePerSec = sign * plan.goalRate.rate.v; // g
+          +/s already canonical                                          
+      168 +        }                                                     
+      169 +        double weekInSec = toCanonical(1.0, "week");          
+      170  
+      167 -        if (b.schedule.workouts != null) {                    
+      168 -            for (String wl : b.schedule.workouts) {           
+      169 -                week.workouts.add(evalWorkout(workouts.get(wl)
+          -));                                                           
+      171 +        for (int k = 1; k <= N; k++) {                        
+      172 +            double offsetSec = (k - 1) * weekInSec;           
+      173 +            Plan.Week week = new Plan.Week();                 
+      174 +            week.index      = k;                              
+      175 +            week.bodyweight = new MassV(plan.athleteBodyweight
+          +.g + bwChangePerSec * offsetSec);                             
+      176 +                                                              
+      177 +            if (b.schedule.workouts != null) {                
+      178 +                for (String wl : b.schedule.workouts) {       
+      179 +                    week.workouts.add(evalWorkout(workouts.get
+          +(wl), offsetSec));                                            
+      180 +                }                                             
+      181              }
+      171 -        }                                                     
+      172 -        if (b.schedule.meals != null) {                       
+      173 -            for (String ml : b.schedule.meals) {              
+      174 -                week.meals.add(evalMeal(meals.get(ml)));      
+      182 +            if (b.schedule.meals != null) {                   
+      183 +                for (String ml : b.schedule.meals) {          
+      184 +                    week.meals.add(evalMeal(meals.get(ml)));  
+      185 +                }                                             
+      186              }
+      176 -        }                                                     
+      177 -        week.macroTotals = sumMacros(week.meals);             
+      187 +            week.macroTotals = sumMacros(week.meals);         
+      188  
+      179 -        for (Ast.RuleDecl r : liveRules) {                    
+      180 -            if (r instanceof Ast.TargetDecl) {                
+      181 -                week.targets.add(evalTarget(                  
+      182 -                    (Ast.TargetDecl) r, week.macroTotals, week
+          -.bodyweight));                                                
+      189 +            for (Ast.RuleDecl r : liveRules) {                
+      190 +                if (r instanceof Ast.TargetDecl) {            
+      191 +                    week.targets.add(evalTarget(              
+      192 +                        (Ast.TargetDecl) r, week.macroTotals, 
+          +week.bodyweight));                                            
+      193 +                }                                             
+      194              }
+      195 +            plan.weeks.add(week);                             
+      196          }
+      185 -                                                              
+      186 -        plan.weeks.add(week);                                 
+      197          return plan;
+      198      }
+      199  
+
+● Update(src\fitlang\Interpreter.java)
+  ⎿  Added 9 lines, removed 5 lines
+      228  
+      229      // ── Workouts ───────────────────────────────────────────
+           ──────────────────
+      230  
+      231 -    private Plan.WorkoutResult evalWorkout(Ast.WorkoutDecl w) 
+          -{                                                             
+      231 +    private Plan.WorkoutResult evalWorkout(Ast.WorkoutDecl w, 
+          +double offsetSec) {                                           
+      232          Plan.WorkoutResult out = new Plan.WorkoutResult();
+      233          out.label = w.label;
+      234 +        double wkPerSec = (w.progress == null) ? 0.0 : liftRat
+          +e(w.progress.rate).v;                                         
+      235          for (Ast.WorkoutItem it : w.items) {
+      236              if (it instanceof Ast.ExerciseDecl) {
+      236 -                out.exercises.add(evalExercise((Ast.ExerciseDe
+          -cl) it, env));                                                
+      237 +                out.exercises.add(evalExercise((Ast.ExerciseDe
+          +cl) it, wkPerSec, offsetSec));                                
+      238              } else if (it instanceof Ast.RoutineCall) {
+      239                  Ast.RoutineCall rc = (Ast.RoutineCall) it;
+      240                  Ast.RoutineDecl rd = routines.get(rc.label);
+      241 +                double rkPerSec = (rd.progress == null) ? 0.0 
+          +: liftRate(rd.progress.rate).v;                               
+      242                  // §4.4.7: bind params, evaluate routine body 
+           in extended env.
+      243                  // (Args are <quantity> in P1; no real express
+           ions yet.)
+      244                  Map<String, Value> savedEnv = new LinkedHashMa
+           p<>(env);
+     ...
+      246                      env.put(rd.params.get(i).name, liftQuantit
+           y(rc.args.get(i)));
+      247                  }
+      248                  for (Ast.ExerciseDecl e : rd.exercises) {
+      247 -                    out.exercises.add(evalExercise(e, env));  
+      249 +                    out.exercises.add(evalExercise(e, rkPerSec
+          +, offsetSec));                                                
+      250                  }
+      251                  env.clear(); env.putAll(savedEnv); // restore 
+           — no closure leak
+      252              }
+     ...
+      254          return out;
+      255      }
+      256  
+      255 -    private Plan.ExerciseResult evalExercise(Ast.ExerciseDecl 
+          -e, Map<String, Value> ignoredEnv) {                           
+      257 +    private Plan.ExerciseResult evalExercise(Ast.ExerciseDecl 
+          +e,                                                            
+      258 +                                             double progressGP
+          +erSec, double offsetSec) {                                    
+      259          Plan.ExerciseResult r = new Plan.ExerciseResult();
+      260          r.label  = e.label;
+      261          r.sets   = e.sets;
+      262          r.reps   = e.reps;
+      260 -        r.weight = (MassV) liftQuantity(e.weight);            
+      263 +        double base_g = ((MassV) liftQuantity(e.weight)).g;   
+      264 +        r.weight = new MassV(base_g + progressGPerSec * offset
+          +Sec);                                                         
+      265          return r;
+      266      }
+      267  
+
+● Now compile:
+● Bash(cmd.exe /c compile.bat 2>&1 | tail -30)
+  ⎿  Microsoft Windows [Version 10.0.26200.8457]
+     (c) Microsoft Corporation. All rights reserved.
+
+     C:\Users\mrmuh\OneDrive\Documents\Projects\PL\PL_Project>
+
+  Read 1 file (ctrl+o to expand)
+
+● Bash(cmd.exe //c "compile.bat" 2>&1 | tail -30)
+  ⎿  'compile.bat' is not recognized as an internal or external command,
+     operable program or batch file.
+
+● Bash(pwd && ls compile.bat)
+  ⎿  /c/Users/mrmuh/OneDrive/Documents/Projects/PL/PL_Project
+     compile.bat
+
+● Bash(cmd.exe //c compile.bat 2>&1 | tail -30)
+  ⎿  'compile.bat' is not recognized as an internal or external command,
+     operable program or batch file.
+
+● PowerShell(.\compile.bat 2>&1 | Select-Object -Last 20)
+  ⎿  Build successful.
+
+● Build clean. Test with existing samples (should still work — default N=1):
+
+  Read 1 file (ctrl+o to expand)
+
+● PowerShell(java -cp out fitlang.Main samples/valid_01_full.fl --run 2>&1 |
+            Select-Object -First 40)
+  ⎿  FitLang Plan
+       Athlete: bodyweight = 78 kg, goal = bulk
+       Horizon: 1 week
+     … +14 lines (ctrl+o to expand)
+
+● Backward compat OK. Let me look at valid_01_full to write a plan 4 week
+  variant:
+
+  Read 1 file (ctrl+o to expand)
+
+● Write(samples\valid_04_multi_week.fl)
+  ⎿  Wrote 20 lines to samples\valid_04_multi_week.fl
+         s, targets re-evaluate. — exercises progress, bodyweight project
+       2 athlete(bodyweight: 78 kg, goal: bulk) {
+       3 
+       5         exercise "Bench Press"    { sets: 4, reps: 6, weight: 80
+          kg }
+       6         exercise "Overhead Press" { sets: 3, reps: 8, weight: 50
+       7         progress weight 2.5 kg/week
+       8     }
+       9 
+      10     meal "Breakfast" {
+     … +13 lines (ctrl+o to expand)
+
+● PowerShell(java -cp out fitlang.Main samples/valid_04_multi_week.fl --run
+            2>&1)
+  ⎿  FitLang Plan
+       Athlete: bodyweight = 78 kg, goal = bulk
+       Horizon: 4 week
+     … +25 lines (ctrl+o to expand)
+
+● PowerShell(java -cp out fitlang.Main samples/valid_04_multi_week.fl --dump-ast
+             2>&1 | Select-String "Schedule" -Context 0,4)
+  ⎿  >   ScheduleStmt
+           weeks    : 4
+           workouts : ["Push Day"]
+           meals    : ["Breakfast"]
+
+● PowerShell($test = @'
+            athlete(bodyweight: 78 kg, goal: cut) {…)
+  ⎿  Error: Exit code 1
+     java : Parse error: Unexpected character '' [line 1, col 1]
+     At line:11 char:1
+     + java -cp out fitlang.Main tmp_cut.fl --run 2>&1
+     + ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+         + CategoryInfo          : NotSpecified: (Parse error: Un...[line 1, col
+      1]:String) [], RemoteException
+         + FullyQualifiedErrorId : NativeCommandError
+
+● Write(tmp_cut.fl)
+  ⎿  Wrote 7 lines to tmp_cut.fl
+      1 athlete(bodyweight: 78 kg, goal: cut) {
+      2     workout "Push Day" {
+      3         exercise "Bench Press" { sets: 4, reps: 6, weight: 80 kg 
+        }
+      4     }
+      5     goal lose 0.5 kg/week
+      6     plan 3 week with workouts: ["Push Day"]
+      7 }
+
+● PowerShell(java -cp out fitlang.Main tmp_cut.fl --run 2>&1; Remove-Item
+            tmp_cut.fl)
+  ⎿  FitLang Plan
+       Athlete: bodyweight = 78 kg, goal = cut
+       Horizon: 3 week
+     … +13 lines (ctrl+o to expand)
+
+● Write(tmp_zero.fl)
+  ⎿  Wrote 4 lines to tmp_zero.fl
+      1 athlete(bodyweight: 78 kg, goal: maintain) {
+      2     workout "X" { exercise "E" { sets: 1, reps: 1, weight: 1 kg }
+         }
+      3     plan 0 week with workouts: ["X"]
+      4 }
+
+● PowerShell(java -cp out fitlang.Main tmp_zero.fl --run 2>&1; Remove-Item
+            tmp_zero.fl)
+  ⎿  Error: Exit code 1
+     java : Parse error: Expected a positive integer, got: 0 [line 3, col 10]
+     At line:1 char:1
+     + java -cp out fitlang.Main tmp_zero.fl --run 2>&1; Remove-Item tmp_zer ...
+     + ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+         + CategoryInfo          : NotSpecified: (Parse error: Ex...line 3, col 
+     10]:String) [], RemoteException
+         + FullyQualifiedErrorId : NativeCommandError
+
+● plan 0 week rejected as expected. Let me regression-test all existing samples:
+
+● PowerShell(foreach ($f in Get-ChildItem samples/valid_*.fl) { Write-Host "===
+            $($f.Name) ==="; java -cp out fitlang.Main $f.FullName 2>&1 |
+            Select-Object -First 2 })
+  ⎿  === valid_01_full.fl ===
+     OK: 'C:\Users\mrmuh\OneDrive\Documents\Projects\PL\PL_Project\samples\
+     valid_01_full.fl' parsed and type-checked successfully.
+     … +9 lines (ctrl+o to expand)
+● All four valid samples pass. Multi-week extension is wired through Parser →
+  AST → Interpreter:
+
+  What changed
+  - Parser.parseScheduleStmt — optional NUM_LIT before week, defaulting to 1;
+  parsePositiveInt rejects 0 and non-integers (Parser.java:425).
+  - Ast.ScheduleStmt — new int weeks field (Ast.java:268).
+  - AstDumper — prints weeks : N.
+  - Interpreter.run — loops k=1..N: bw_k = bw₀ ± goalRate × ((k−1) week) with
+  LOSE negating; passes offsetSec into evalWorkout which now folds
+  workout/routine progress weight r into each exercise (w₀ + r × offset).
+  Targets recompute against bw_k; meals stay constant per §4.4.8.
+  - New sample samples/valid_04_multi_week.fl — verifies projection and exercise
+   progression.
+
+  Lift checked end-to-end: 4-week bulk shows 78 → 78.5 → 79 → 79.5 kg, bench 80 
+  → 87.5 kg, target threshold 140.4 → 143.1 g rescaling with projected bw.
+  3-week cut/lose confirms sign flip.
+
+  Want me to add a journal entry for this and commit?
+
+✻ Brewed for 5m 11s
+
+❯ Wait not yet. As I remember there were an issue with identifiers/variables    
+  where they could not be referenced anywhere in the program. Did we solve      
+  that?                                                                         
+
+● No, we didn't. That's the §4.7 deferred item from entry 11 — still open.
+
+  Current state: let x = … evaluates expressions into the env, but every
+  executable slot still calls parseQuantity, not parseExpression:
+
+  - parseExerciseDecl (Parser.java:250) — weight: <quantity>
+  - parseMacroDecl (Parser.java:311) — macros take <quantity>
+  - parseRoutineCall (Parser.java:217, 220) — args are <quantity>
+  - parseTargetDecl (Parser.java:367) — threshold is <quantity>
+  - parseProgressStmt (Parser.java:272) — <rate>
+  - parseGoalRateDecl (Parser.java:410) — <rate>
+
+  So IdentExpr parses fine inside let, but there's no syntactic position where a
+   let-bound name can be used — the binding is observationally dead. The
+  interpreter already handles IdentExpr (lookup via env.get), so the fix is
+  purely: widen the listed slots from parseQuantity/parseRate to
+  parseExpression, and let the type checker enforce family-correctness.
+
+  Want to tackle §4.7 now (widen the slots), or finish the multi-week
+  journal+commit first and do §4.7 as the next session?
+
+✻ Crunched for 11s
+
+❯ let's finish the multi-week                                                   
+
+● Bash(ls tmp_*.fl 2>&1; git status --short)
+  ⎿  ls: cannot access 'tmp_*.fl': No such file or directory
+      M src/fitlang/AstDumper.java
+      M src/fitlang/Interpreter.java
+     … +3 lines (ctrl+o to expand)
+
+  Read 1 file (ctrl+o to expand)
+
+● Write(docs\ai-journal\entries\12_2026-05-18_multi-week.md)
+  ⎿  Wrote 93 lines to docs\ai-journal\entries\12_2026-05-18_multi-week.md
+       2 entry: 12
+       3 date: 2026-05-18
+       4 phase: Parser | Interpreter
+       5 ai_tool: Claude Opus 4.7
+       6 ---
+       7 
+       8 # Entry 12 — `plan N week` extension across Parser, AST, Interpr
+         eter
+       9 
+      10 ## Goal
+     … +125 lines (ctrl+o to expand)
+
+● Bash(git add src/fitlang/Parser.java src/fitlang/AstDumper.java
+      src/fitlang/Interpreter.java src/fitlang/ast/Ast.java
+      samples/valid_04_multi_week.fl docs/ai-journal/…)
+  ⎿  warning: in the working copy of 'src/fitlang/AstDumper.java', LF will
+     be replaced by CRLF the next time Git touches it
+     warning: in the working copy of 'src/fitlang/Interpreter.java', LF wil
+     … +14 lines (ctrl+o to expand)
+
+● Bash(git push)
+  ⎿  To https://github.com/M-Pasa/PL_Project.git
+        667aea5..a81fa11  main -> main
+
+● Pushed a81fa11. Tree clean.
+
+  Still owed for P2 from entry 11's deferred list: §4.7 expression-bodied slots
+  (the let-binding usability fix you flagged) and §4.8 design rationale. Raw
+  session for today isn't saved yet either — let me know if you want to add it
+  before the next task.
+
+✻ Cooked for 1m 24s
+
+❯ let's step back and summarize what's is don ein P2 and what's left            
+
+● P2 status
+
+  Done
+  - §4.4 Semantics — Interpreter.java, tree-walking, role-keyed display units.
+  Entry 11.
+  - §4.4.8 multi-week — plan [N] week, projected bw_k, exercise progression.
+  Entry 12 (just shipped).
+  - §4.5 Type System — TypeChecker.java, name-equivalent families, within-family
+   coercion, rate cancellation, when-splice. Entry 9.
+  - §4.7.1 expression layer (parser-side) — + - * /, unary -, parenthesisation,
+  NUM/quantity/rate atoms, IdentExpr. Entry 8.
+  - E2 expression-equivalence experiment + E3 type-checker implementation
+  experiment. Entries 8, 9.
+  - D1 sections §4.4 and §4.5 drafted. Entry 7 (P2 design kickoff).
+
+  Left
+  - §4.7 slot widening — let-bound names are currently unusable. Need to swap
+  parseQuantity/parseRate for parseExpression in: parseExerciseDecl (weight),
+  parseMacroDecl, parseRoutineCall (args), parseTargetDecl (threshold),
+  parseProgressStmt, parseGoalRateDecl. Type checker enforces family-correctness
+   per slot; interpreter evalExpr already handles every node.
+  - §4.7.2–§4.7.5 — precedence/associativity table, evaluation-order doc,
+  no-assignment justification, expression type-rules summary. Mostly prose in
+  D1.md.
+  - §4.8 Design Rationale — the P2 write-up; explains the choices already made
+  (name vs structural equivalence, role-keyed display, no globals, when over if,
+   etc.).
+  - D3 P2 samples — current D3 is P1-only; P2 needs samples that exercise
+  expressions in slots and multi-week schedules.
+  - D4 journal Part 2 retrospective — half-page summary like D5 for Part 1.
+  - D5 Part 2 retrospective — separate document.
+  - Today's raw session — not saved to docs/ai-journal/raw_sessions/ yet.
+  - Quiz 2026-05-28 — possibly cumulative per memory; no prep done.
+
+  The §4.7 slot widening is the smallest unit of remaining code work and
+  unblocks the "identifiers go nowhere" problem you flagged. Everything else is
+  documentation.
+
+✻ Cogitated for 18s
+
+❯ let's finish 4.7                                                              
+
+  Read 2 files (ctrl+o to expand)
+
+● Before editing — there's a scoping question I want to verify against the spec.
+   Let me check §4.6.3 and §4.7.1:
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● Hit a real spec question before I write code. The grammar puts <rules-section>
+   (where let lives) after <workout-decl> and <meal-decl>. §4.6.3 rule 1 says a
+  let is visible "in every <expression> that follows it"; §4.6.5 says P2 workout
+   bodies should see athlete-scope lets. Those are in tension if lets come
+  textually after the workouts that reference them.
+
+  Three ways to resolve:
+
+● User answered Claude's questions:
+  ⎿  · How should `let` bindings be visible from workout/meal bodies in P2? → 
+     Move lets before bodies (Recommended)
+
+  Searched for 1 pattern, read 3 files (ctrl+o to expand)
+● This is a significant restructure. I'll move the lets to a prefix section,
+  widen the slots, and fix samples. Starting with AST:
+
+● Update(src\fitlang\ast\Ast.java)
+  ⎿  Added 5 lines, removed 5 lines
+      119      public interface WorkoutItem {}
+      120  
+      121      public static final class ExerciseDecl implements WorkoutI
+           tem {
+      122 -        public final String   label;                          
+      123 -        public final int      sets;                           
+      124 -        public final int      reps;                           
+      125 -        public final Quantity weight;                         
+      122 +        public final String label;                            
+      123 +        public final int    sets;                             
+      124 +        public final int    reps;                             
+      125 +        public final Expr   weight;     // §4.7: any expressio
+          +n of type Quantity(MASS)                                      
+      126  
+      127 -        public ExerciseDecl(String label, int sets, int reps, 
+          -Quantity weight) {                                            
+      127 +        public ExerciseDecl(String label, int sets, int reps, 
+          +Expr weight) {                                                
+      128              this.label  = label;
+      129              this.sets   = sets;
+      130              this.reps   = reps;
+
+● Update(src\fitlang\ast\Ast.java)
+  ⎿  Added 5 lines, removed 5 lines
+      160      }
+      161  
+      162      public static final class RoutineCall implements WorkoutIt
+           em {
+      163 -        public final String         label;                    
+      164 -        public final List<Quantity> args;                     
+      163 +        public final String     label;                        
+      164 +        public final List<Expr> args;   // §4.7: each must mat
+          +ch the declared param family                                  
+      165  
+      166 -        public RoutineCall(String label, List<Quantity> args) 
+          -{                                                             
+      166 +        public RoutineCall(String label, List<Expr> args) {   
+      167              this.label = label;
+      168              this.args  = args;
+      169          }
+      170      }
+      171  
+      172      public static final class ProgressStmt {
+      173 -        public final Rate rate;                               
+      174 -        public ProgressStmt(Rate rate) { this.rate = rate; }  
+      173 +        public final Expr rate;          // §4.7: any expressi
+          +on of type Rate(MASS, TIME)                                   
+      174 +        public ProgressStmt(Expr rate) { this.rate = rate; }  
+      175      }
+      176  
+      177      public static final class WorkoutDecl {
+
+● Update(src\fitlang\ast\Ast.java)
+  ⎿  Added 4 lines, removed 4 lines
+      188  
+      189      public static final class MacroDecl {
+      190          public final MacroName name;
+      191 -        public final Quantity  quantity;                      
+      191 +        public final Expr      value;    // §4.7: any expressi
+          +on of type Quantity(MASS)                                     
+      192  
+      193 -        public MacroDecl(MacroName name, Quantity quantity) { 
+      194 -            this.name     = name;                             
+      195 -            this.quantity = quantity;                         
+      193 +        public MacroDecl(MacroName name, Expr value) {        
+      194 +            this.name  = name;                                
+      195 +            this.value = value;                               
+      196          }
+      197      }
+      198  
+
+● Update(src\fitlang\ast\Ast.java)
+  ⎿  Added 6 lines, removed 6 lines
+      213      public static final class TargetDecl implements RuleDecl {
+      214          public final MacroName  macro;
+      215          public final String     relOp;
+      216 -        public final Quantity   qty;                          
+      217 -        public final String     perUnit;    // null if no "per
+          - X of bodyweight"                                             
+      218 -        public final UnitFamily perFamily;  // null iff perUni
+          -t is null                                                     
+      216 +        public final Expr       qty;       // §4.7: any expres
+          +sion of type Quantity(MASS)                                   
+      217 +        public final String     perUnit;   // null if no "per 
+          +X of bodyweight"                                              
+      218 +        public final UnitFamily perFamily; // null iff perUnit
+          + is null                                                      
+      219  
+      220 -        public TargetDecl(MacroName macro, String relOp, Quant
+          -ity qty,                                                      
+      220 +        public TargetDecl(MacroName macro, String relOp, Expr 
+          +qty,                                                          
+      221                            String perUnit, UnitFamily perFamily
+           ) {
+      222              this.macro     = macro;
+      223              this.relOp     = relOp;
+     ...
+      229  
+      230      public static final class GoalRateDecl implements RuleDecl
+            {
+      231          public final Direction direction;
+      232 -        public final Rate      rate;                          
+      232 +        public final Expr      rate;     // §4.7: any expressi
+          +on of type Rate(MASS, TIME)                                   
+      233  
+      234 -        public GoalRateDecl(Direction direction, Rate rate) { 
+      234 +        public GoalRateDecl(Direction direction, Expr rate) { 
+      235              this.direction = direction;
+      236              this.rate      = rate;
+      237          }
+
+● Update(src\fitlang\ast\Ast.java)
+  ⎿  Added 7 lines, removed 1 line
+      253          }
+      254      }
+      255  
+      256 -    public static final class LetDecl implements RuleDecl {   
+      256 +    /**                                                       
+      257 +     * §4.7 let-section: between routine declarations and the 
+          +body sections.                                                
+      258 +     * No longer a RuleDecl — lets live in a dedicated prefix 
+          +so their                                                      
+      259 +     * bindings are visible inside workout and meal bodies as 
+          +well as inside                                                
+      260 +     * the rules section that follows.                        
+      261 +     */                                                       
+      262 +    public static final class LetDecl {                       
+      263          public final String name;
+      264          public final Expr   expr;
+      265  
+
+● Update(src\fitlang\ast\Ast.java)
+  ⎿  Added 5 lines, removed 2 lines
+      298      public static final class AthleteBlock {
+      299          public final AthleteParams     params;
+      300          public final List<RoutineDecl> routines;
+      301 +        public final List<LetDecl>     lets;        // §4.7 pr
+          +efix let-section                                              
+      302          public final List<WorkoutDecl> workouts;
+      303          public final List<MealDecl>    meals;
+      304          public final List<RuleDecl>    rules;
+      305          public final ScheduleStmt      schedule;
+      306  
+      307          public AthleteBlock(AthleteParams params, List<Routine
+           Decl> routines,
+      307 -                            List<WorkoutDecl> workouts, List<M
+          -ealDecl> meals,                                               
+      308 -                            List<RuleDecl> rules, ScheduleStmt
+          - schedule) {                                                  
+      308 +                            List<LetDecl> lets, List<WorkoutDe
+          +cl> workouts,                                                 
+      309 +                            List<MealDecl> meals, List<RuleDec
+          +l> rules,                                                     
+      310 +                            ScheduleStmt schedule) {          
+      311              this.params   = params;
+      312              this.routines = routines;
+      313 +            this.lets     = lets;                             
+      314              this.workouts = workouts;
+      315              this.meals    = meals;
+      316              this.rules    = rules;
+
+● Update(src\fitlang\Parser.java)
+  ⎿  Added 4 lines
+      79          List<Ast.RoutineDecl> routines = new ArrayList<>();
+      80          while (check(Token.Type.ROUTINE)) routines.add(parseRou
+          tineDecl());
+      81  
+      82 +        // §4.7 let-section — bindings visible in workout/meal 
+         +bodies and rules.                                              
+      83 +        List<Ast.LetDecl> lets = new ArrayList<>();            
+      84 +        while (check(Token.Type.LET)) lets.add(parseLetDecl());
+      85 +                                                               
+      86          // <body-sections> → <plan-section> [ <intake-section> 
+          ] | <intake-section>
+      87          List<Ast.WorkoutDecl> workouts = new ArrayList<>();
+      88          List<Ast.MealDecl>    meals    = new ArrayList<>();
+
+● Update(src\fitlang\Parser.java)
+  ⎿  Added 1 line, removed 2 lines
+      107          Ast.ScheduleStmt schedule = parseScheduleStmt();
+      108          expect(Token.Type.RBRACE);
+      109  
+      110 -        return new Ast.AthleteBlock(params, routines, workouts
+          -, meals, rules, schedule);                                    
+      110 +        return new Ast.AthleteBlock(params, routines, lets, wo
+          +rkouts, meals, rules, schedule);                              
+      111      }
+      112  
+      113      private boolean isRuleStart(Token.Type t) {
+      114          return t == Token.Type.TARGET
+      115              || t == Token.Type.GOAL
+      116 -            || t == Token.Type.LET                            
+      116              || t == Token.Type.WHEN;
+      117      }
+      118  
+
+● Update(src\fitlang\Parser.java)
+  ⎿  Added 3 lines, removed 3 lines
+      314          return new Ast.MacroDecl(name, parseQuantity());
+      315      }
+      316  
+      317 -    // <rule-decl> → <target-decl> | <goal-rate-decl> | <let-d
+          -ecl> | <when-decl>                                            
+      317 +    // <rule-decl> → <target-decl> | <goal-rate-decl> | <when-
+          +decl>                                                         
+      318 +    // (§4.7: <let-decl> lives in the prefix let-section, not 
+          +the rules section.)                                           
+      319      private Ast.RuleDecl parseRuleDecl() {
+      320          switch (peek().type) {
+      321              case TARGET: return parseTargetDecl();
+      322              case GOAL:   return parseGoalRateDecl();
+      322 -            case LET:    return parseLetDecl();               
+      323              case WHEN:   return parseWhenDecl();
+      324              default:
+      325                  Token t = peek();
+      326                  throw new FitLangException(
+      327 -                    "Expected rule declaration (target/goal/le
+          -t/when)", t.line, t.col);                                     
+      327 +                    "Expected rule declaration (target/goal/wh
+          +en)", t.line, t.col);                                         
+      328          }
+      329      }
+      330  
+
+● Now widen all the slot calls:
+
+● Update(src\fitlang\Parser.java)
+  ⎿  Added 4 lines, removed 4 lines
+      211              nameTok.lexeme, unitTok.lexeme, Ast.familyOf(unitT
+           ok.type));
+      212      }
+      213  
+      214 -    // <routine-call> → "use" STRING_LIT "(" <quantity> { "," 
+          -<quantity> } ")"                                              
+      214 +    // <routine-call> → "use" STRING_LIT "(" <expression> { ",
+          +" <expression> } ")"                                          
+      215      private Ast.RoutineCall parseRoutineCall() {
+      216          expect(Token.Type.USE);
+      217          String label = expect(Token.Type.STRING_LIT).lexeme;
+      218          expect(Token.Type.LPAREN);
+      219 -        List<Ast.Quantity> args = new ArrayList<>();          
+      220 -        args.add(parseQuantity());                            
+      219 +        List<Ast.Expr> args = new ArrayList<>();              
+      220 +        args.add(parseExpression());                          
+      221          while (check(Token.Type.COMMA)) {
+      222              advance();
+      223 -            args.add(parseQuantity());                        
+      223 +            args.add(parseExpression());                      
+      224          }
+      225          expect(Token.Type.RPAREN);
+      226          return new Ast.RoutineCall(label, args);
+
+● Update(src\fitlang\Parser.java)
+  ⎿  Added 2 lines, removed 2 lines
+      229      // <exercise-decl> → "exercise" STRING_LIT "{"
+      230      //                       "sets" ":" NUM_LIT ","
+      231      //                       "reps" ":" NUM_LIT ","
+      232 -    //                       "weight" ":" <quantity>          
+      232 +    //                       "weight" ":" <expression>        
+      233      //                   "}"
+      234      private Ast.ExerciseDecl parseExerciseDecl() {
+      235          expect(Token.Type.EXERCISE);
+     ...
+      250  
+      251          expect(Token.Type.WEIGHT);
+      252          expect(Token.Type.COLON);
+      253 -        Ast.Quantity weight = parseQuantity();                
+      253 +        Ast.Expr weight = parseExpression();                  
+      254  
+      255          expect(Token.Type.RBRACE);
+      256  
+
+● Update(src\fitlang\Parser.java)
+  ⎿  Added 2 lines, removed 2 lines
+      268          return (int) d;
+      269      }
+      270  
+      271 -    // <progress-stmt> → "progress" "weight" <rate>           
+      271 +    // <progress-stmt> → "progress" "weight" <expression>     
+      272      private Ast.ProgressStmt parseProgressStmt() {
+      273          expect(Token.Type.PROGRESS);
+      274          expect(Token.Type.WEIGHT);
+      275 -        return new Ast.ProgressStmt(parseRate());             
+      275 +        return new Ast.ProgressStmt(parseExpression());       
+      276      }
+      277  
+      278      // <meal-decl> → "meal" STRING_LIT "{" <macro-decl>+ "}"
+
+● Update(src\fitlang\Parser.java)
+  ⎿  Added 2 lines, removed 2 lines
+      298          return t == Token.Type.PROTEIN || t == Token.Type.CARB
+           S || t == Token.Type.FAT;
+      299      }
+      300  
+      301 -    // <macro-decl> → <macro-name> ":" <quantity>             
+      301 +    // <macro-decl> → <macro-name> ":" <expression>           
+      302      // <macro-name>  → "protein" | "carbs" | "fat"
+      303      private Ast.MacroDecl parseMacroDecl() {
+      304          Token t = peek();
+     ...
+      311                  throw new FitLangException("Expected macro nam
+           e (protein/carbs/fat)", t.line, t.col);
+      312          }
+      313          expect(Token.Type.COLON);
+      314 -        return new Ast.MacroDecl(name, parseQuantity());      
+      314 +        return new Ast.MacroDecl(name, parseExpression());    
+      315      }
+      316  
+      317      // <rule-decl> → <target-decl> | <goal-rate-decl> | <when-
+           decl>
+
+● Update(src\fitlang\Parser.java)
+  ⎿  Added 2 lines, removed 2 lines
+      352          return new Ast.WhenDecl(mode, thenRules, elseRules);
+      353      }
+      354  
+      355 -    // <target-decl> → "target" <macro-name> <rel-op> <quantit
+          -y>                                                            
+      355 +    // <target-decl> → "target" <macro-name> <rel-op> <express
+          +ion>                                                          
+      356      //                     [ "per" UNIT "of" "bodyweight" ]
+      357      private Ast.TargetDecl parseTargetDecl() {
+      358          expect(Token.Type.TARGET);
+     ...
+      367                      "Expected macro name (protein/carbs/fat) a
+           fter 'target'", macroTok.line, macroTok.col);
+      368          }
+      369          String relOp = parseRelOp();
+      370 -        Ast.Quantity qty = parseQuantity();                   
+      370 +        Ast.Expr qty = parseExpression();                     
+      371  
+      372          String perUnit = null;
+      373          Ast.UnitFamily perFamily = null;
+
+● Update(src\fitlang\Parser.java)
+  ⎿  Added 2 lines, removed 2 lines
+      397          }
+      398      }
+      399  
+      400 -    // <goal-rate-decl> → "goal" <direction> <rate>           
+      400 +    // <goal-rate-decl> → "goal" <direction> <expression>     
+      401      // <direction>       → "lose" | "gain"
+      402      private Ast.GoalRateDecl parseGoalRateDecl() {
+      403          expect(Token.Type.GOAL);
+     ...
+      410                  throw new FitLangException(
+      411                      "Expected direction 'lose' or 'gain' after
+            'goal'", t.line, t.col);
+      412          }
+      413 -        return new Ast.GoalRateDecl(dir, parseRate());        
+      413 +        return new Ast.GoalRateDecl(dir, parseExpression());  
+      414      }
+      415  
+      416      // <let-decl> → "let" IDENT "=" <expression>
+
+  Searched for 1 pattern (ctrl+o to expand)
+
+● Update(src\fitlang\Parser.java)
+  ⎿  Removed 12 lines
+      485              Ast.familyOf(unitTok.type));
+      486      }
+      487  
+      488 -    // <rate> → NUM_LIT UNIT "/" UNIT                         
+      489 -    private Ast.Rate parseRate() {                            
+      490 -        Token numTok   = expect(Token.Type.NUM_LIT);          
+      491 -        Token numerTok = expectUnit();                        
+      492 -        expect(Token.Type.SLASH);                             
+      493 -        Token denomTok = expectUnit();                        
+      494 -        return new Ast.Rate(                                  
+      495 -            Double.parseDouble(numTok.lexeme),                
+      496 -            numerTok.lexeme, Ast.familyOf(numerTok.type),     
+      497 -            denomTok.lexeme, Ast.familyOf(denomTok.type));    
+      498 -    }                                                         
+      499 -                                                              
+      488      // <expression> → <add-expr>                              
+                 (§4.7.1)
+      489      // <add-expr>   → <mul-expr> { ("+" | "-") <mul-expr> }
+      490      // <mul-expr>   → <unary>    { ("*" | "/") <unary>    }
+● Update(src\fitlang\TypeChecker.java)
+  ⎿  Added 3 lines
+       95              checkRoutineDecl(r);
+       96          }
+       97  
+       98 +        // §4.7 prefix let-section — bindings visible in worko
+          +ut/meal bodies and rules.                                     
+       99 +        for (Ast.LetDecl ld : b.lets) checkLetDecl(ld);       
+      100 +                                                              
+      101          for (Ast.WorkoutDecl w : b.workouts) {
+      102              if (workoutLabels.contains(w.label))
+      103                  err("duplicate workout label \"" + w.label + "
+           \"");
+
+● Update(src\fitlang\TypeChecker.java)
+  ⎿  Added 28 lines, removed 16 lines
+      122      // ── Declarations ───────────────────────────────────────
+           ──────────────────
+      123  
+      124      private void checkRoutineDecl(Ast.RoutineDecl r) {
+      125 +        // Routine bodies are templates: their exercise weight
+          +s and the progress                                            
+      126 +        // rate are typed in the athlete env (no routine-param
+          +eter binding yet —                                            
+      127 +        // that happens at the call site). Per-call argument f
+          +amily-match is                                                
+      128 +        // enforced separately in checkRoutineCall.           
+      129          for (Ast.ExerciseDecl e : r.exercises) checkExerciseDe
+           cl(e, "routine \"" + r.label + "\"");
+      130          if (r.progress != null) checkProgressRate(r.progress.r
+           ate, "routine \"" + r.label + "\"");
+      131      }
+     ...
+      141      }
+      142  
+      143      private void checkExerciseDecl(Ast.ExerciseDecl e, String 
+           where) {
+      140 -        if (e.weight.family != UnitFamily.MASS)               
+      141 -            err(where + " exercise \"" + e.label + "\": weight
+          - must be Mass, got "                                          
+      142 -                + e.weight + " [" + e.weight.family + "]");   
+      144 +        String ctx = where + " exercise \"" + e.label + "\" we
+          +ight";                                                        
+      145 +        FType t = checkExpr(e.weight, ctx);                   
+      146 +        if (t == null) return;                                
+      147 +        if (!(t instanceof TQuantity) || ((TQuantity) t).fam !
+          += UnitFamily.MASS)                                            
+      148 +            err(ctx + ": must be Quantity(MASS), got " + t);  
+      149      }
+      150  
+      145 -    private void checkProgressRate(Ast.Rate r, String where) {
+      146 -        if (r.numerFamily != UnitFamily.MASS || r.denomFamily 
+          -!= UnitFamily.TIME)                                           
+      147 -            err(where + " progress rate must be Rate(Mass, Tim
+          -e), got " + r                                                 
+      148 -                + " [Rate(" + r.numerFamily + "," + r.denomFam
+          -ily + ")]");                                                  
+      151 +    private void checkProgressRate(Ast.Expr rateExpr, String w
+          +here) {                                                       
+      152 +        String ctx = where + " progress rate";                
+      153 +        FType t = checkExpr(rateExpr, ctx);                   
+      154 +        if (t == null) return;                                
+      155 +        if (!(t instanceof TRate)                             
+      156 +            || ((TRate) t).numer != UnitFamily.MASS           
+      157 +            || ((TRate) t).denom != UnitFamily.TIME)          
+      158 +            err(ctx + ": must be Rate(MASS, TIME), got " + t);
+      159      }
+      160  
+      161      private void checkRoutineCall(Ast.RoutineCall c) {
+     ...
+      170              return;
+      171          }
+      172          for (int i = 0; i < c.args.size(); i++) {
+      163 -            UnitFamily got    = c.args.get(i).family;         
+      173 +            String ctx = "routine call \"" + c.label + "\" arg
+          +ument " + (i + 1)                                             
+      174 +                + " (" + decl.params.get(i).name + ")";       
+      175 +            FType t = checkExpr(c.args.get(i), ctx);          
+      176 +            if (t == null) continue;                          
+      177              UnitFamily wanted = decl.params.get(i).family;
+      165 -            if (got != wanted)                                
+      166 -                err("routine call \"" + c.label + "\" argument
+          - " + (i + 1)                                                  
+      167 -                    + " (" + decl.params.get(i).name + "): exp
+          -ected "                                                       
+      168 -                    + wanted + ", got " + got);               
+      178 +            if (!(t instanceof TQuantity) || ((TQuantity) t).f
+          +am != wanted)                                                 
+      179 +                err(ctx + ": expected Quantity(" + wanted + ")
+          +, got " + t);                                                 
+      180          }
+      181      }
+      182  
+      183      private void checkMealDecl(Ast.MealDecl m) {
+      184          for (Ast.MacroDecl mc : m.macros) {
+      174 -            if (mc.quantity.family != UnitFamily.MASS)        
+      175 -                err("meal \"" + m.label + "\": macro "        
+      176 -                    + mc.name.name().toLowerCase() + " must be
+          - Mass, got "                                                  
+      177 -                    + mc.quantity + " [" + mc.quantity.family 
+          -+ "]");                                                       
+      185 +            String ctx = "meal \"" + m.label + "\" macro " + m
+          +c.name.name().toLowerCase();                                  
+      186 +            FType t = checkExpr(mc.value, ctx);               
+      187 +            if (t == null) continue;                          
+      188 +            if (!(t instanceof TQuantity) || ((TQuantity) t).f
+          +am != UnitFamily.MASS)                                        
+      189 +                err(ctx + ": must be Quantity(MASS), got " + t
+          +);                                                            
+      190          }
+      191      }
+      192  
+
+● Update(src\fitlang\TypeChecker.java)
+  ⎿  Added 1 line, removed 2 lines
+      191      }
+      192  
+      193      private void checkRuleDecl(Ast.RuleDecl r, Ast.GoalMode go
+           alMode) {
+      194 -        if (r instanceof Ast.LetDecl)        checkLetDecl((Ast
+          -.LetDecl) r);                                                 
+      195 -        else if (r instanceof Ast.TargetDecl)   checkTargetDec
+          -l((Ast.TargetDecl) r);                                        
+      194 +        if      (r instanceof Ast.TargetDecl)   checkTargetDec
+          +l((Ast.TargetDecl) r);                                        
+      195          else if (r instanceof Ast.GoalRateDecl) checkGoalRateD
+           ecl((Ast.GoalRateDecl) r, goalMode);
+      196          else if (r instanceof Ast.WhenDecl)     checkWhenDecl(
+           (Ast.WhenDecl) r, goalMode);
+      197      }
+
+● Update(src\fitlang\TypeChecker.java)
+  ⎿  Added 10 lines, removed 6 lines
+      209      }
+      210  
+      211      private void checkTargetDecl(Ast.TargetDecl t) {
+      212 -        if (t.qty.family != UnitFamily.MASS)                  
+      213 -            err("target " + t.macro.name().toLowerCase()      
+      214 -                + ": threshold must be Mass, got " + t.qty + "
+          - [" + t.qty.family + "]");                                    
+      212 +        String ctx = "target " + t.macro.name().toLowerCase() 
+          ++ " threshold";                                               
+      213 +        FType ty = checkExpr(t.qty, ctx);                     
+      214 +        if (ty != null && (!(ty instanceof TQuantity) || ((TQu
+          +antity) ty).fam != UnitFamily.MASS))                          
+      215 +            err(ctx + ": must be Quantity(MASS), got " + ty); 
+      216          if (t.perUnit != null && t.perFamily != UnitFamily.MAS
+           S)
+      217              err("target " + t.macro.name().toLowerCase()
+      218                  + ": 'per " + t.perUnit + " of bodyweight' uni
+           t must be a Mass unit");
+      219      }
+      220  
+      221      private void checkGoalRateDecl(Ast.GoalRateDecl g, Ast.Goa
+           lMode goalMode) {
+      221 -        if (g.rate.numerFamily != UnitFamily.MASS || g.rate.de
+          -nomFamily != UnitFamily.TIME)                                 
+      222 -            err("goal " + g.direction.name().toLowerCase()    
+      223 -                + ": rate must be Rate(Mass, Time), got " + g.
+          -rate);                                                        
+      222 +        String ctx = "goal " + g.direction.name().toLowerCase(
+          +) + " rate";                                                  
+      223 +        FType t = checkExpr(g.rate, ctx);                     
+      224 +        if (t != null && (!(t instanceof TRate)               
+      225 +                || ((TRate) t).numer != UnitFamily.MASS       
+      226 +                || ((TRate) t).denom != UnitFamily.TIME))     
+      227 +            err(ctx + ": must be Rate(MASS, TIME), got " + t);
+      228          // §4.4.9 consistency: bulk+lose and cut+gain are reje
+           cted; maintain accepts either.
+      229          if (goalMode == Ast.GoalMode.BULK && g.direction == As
+           t.Direction.LOSE)
+      230              err("goal direction 'lose' is inconsistent with at
+           hlete goal 'bulk' (§4.4.9)");
+
+● Now the Interpreter — process prefix lets first, eval all slot expressions:
+
+● Update(src\fitlang\Interpreter.java)
+  ⎿  Added 8 lines
+      102          return new RateV(num / den, r.numerFamily, r.denomFami
+           ly);
+      103      }
+      104  
+      105 +    // ── Slot evaluators (§4.7) ─────────────────────────────
+          +──────────────────                                            
+      106 +    // Type checker has already proved the slot expression has
+          + the family/shape                                             
+      107 +    // each call site expects; these helpers just downcast the
+          + evaluated Value.                                             
+      108 +                                                              
+      109 +    private MassV evalMass(Ast.Expr e) { return (MassV) evalEx
+          +pr(e); }                                                      
+      110 +                                                              
+      111 +    private RateV evalRateMassTime(Ast.Expr e) { return (RateV
+          +) evalExpr(e); }                                              
+      112 +                                                              
+      113      // ── Display helpers (role-keyed; deltas use measured-sid
+           e role) ──────────
+      114  
+      115      private static String fmt(double d) {
+
+● Update(src\fitlang\Interpreter.java)
+  ⎿  Added 6 lines, removed 8 lines
+      150          for (Ast.WorkoutDecl w : b.workouts) workouts.put(w.la
+           bel, w);
+      151          for (Ast.MealDecl    m : b.meals)    meals.put(m.label
+           , m);
+      152  
+      153 -        // §4.4.5: evaluate let-decls into the env; static whe
+          -n-dispatch (§4.4.10)                                          
+      154 -        // splices the surviving branch into the rule stream. 
+      153 +        // §4.7 prefix let-section is evaluated first so worko
+          +ut and meal                                                   
+      154 +        // bodies see the bindings (§4.6.5).                  
+      155 +        for (Ast.LetDecl ld : b.lets) env.put(ld.name, evalExp
+          +r(ld.expr));                                                  
+      156 +                                                              
+      157 +        // §4.4.10 static when-dispatch: splice the surviving 
+          +branch into the                                               
+      158 +        // rule stream. (No lets in rules anymore — see §4.7.)
+      159          List<Ast.RuleDecl> liveRules = new ArrayList<>();
+      160          spliceRules(b.rules, b.params.goal, liveRules);
+      157 -        for (Ast.RuleDecl r : liveRules) {                    
+      158 -            if (r instanceof Ast.LetDecl) {                   
+      159 -                Ast.LetDecl ld = (Ast.LetDecl) r;             
+      160 -                env.put(ld.name, evalExpr(ld.expr));          
+      161 -            }                                                 
+      162 -        }                                                     
+      161  
+      162          int N = b.schedule.weeks;
+      163          Plan plan = new Plan();
+
+● Update(src\fitlang\Interpreter.java)
+  ⎿  Added 2 lines, removed 2 lines
+      166          plan.horizon           = new TimeV(toCanonical(N, "wee
+           k"));
+      167          plan.goalRate          = findGoalRate(liveRules);
+      168  
+      169 -        // §4.4.8: signed kg/s change per second of elapsed ti
+          -me. lose negates.                                             
+      169 +        // §4.4.8: signed g/s change per second of elapsed tim
+          +e. lose negates.                                              
+      170          double bwChangePerSec = 0.0;
+      171          if (plan.goalRate != null) {
+      172              int sign = (plan.goalRate.direction == Ast.Directi
+           on.LOSE) ? -1 : +1;
+      173 -            bwChangePerSec = sign * plan.goalRate.rate.v; // g
+          -/s already canonical                                          
+      173 +            bwChangePerSec = sign * plan.goalRate.rate.v; // c
+          +anonical (g/s)                                                
+      174          }
+      175          double weekInSec = toCanonical(1.0, "week");
+      176  
+
+● Update(src\fitlang\Interpreter.java)
+  ⎿  Added 1 line, removed 1 line
+      225                  Ast.GoalRateDecl g = (Ast.GoalRateDecl) r;
+      226                  Plan.GoalRate out = new Plan.GoalRate();
+      227                  out.direction = g.direction;
+      228 -                out.rate      = liftRate(g.rate);             
+      228 +                out.rate      = evalRateMassTime(g.rate);     
+      229                  return out;
+      230              }
+      231          }
+
+● Update(src\fitlang\Interpreter.java)
+  ⎿  Added 8 lines, removed 5 lines
+      237      private Plan.WorkoutResult evalWorkout(Ast.WorkoutDecl w, 
+           double offsetSec) {
+      238          Plan.WorkoutResult out = new Plan.WorkoutResult();
+      239          out.label = w.label;
+      240 -        double wkPerSec = (w.progress == null) ? 0.0 : liftRat
+          -e(w.progress.rate).v;                                         
+      240 +        double wkPerSec = (w.progress == null) ? 0.0 : evalRat
+          +eMassTime(w.progress.rate).v;                                 
+      241          for (Ast.WorkoutItem it : w.items) {
+      242              if (it instanceof Ast.ExerciseDecl) {
+      243                  out.exercises.add(evalExercise((Ast.ExerciseDe
+           cl) it, wkPerSec, offsetSec));
+      244              } else if (it instanceof Ast.RoutineCall) {
+      245                  Ast.RoutineCall rc = (Ast.RoutineCall) it;
+      246                  Ast.RoutineDecl rd = routines.get(rc.label);
+      247 -                double rkPerSec = (rd.progress == null) ? 0.0 
+          -: liftRate(rd.progress.rate).v;                               
+      247                  // §4.4.7: bind params, evaluate routine body 
+           in extended env.
+      249 -                // (Args are <quantity> in P1; no real express
+          -ions yet.)                                                    
+      248 +                // Args are arbitrary expressions in P2 (§4.7)
+          + — eval first in                                              
+      249 +                // the caller's env, then bind into the extend
+          +ed env.                                                       
+      250 +                List<Value> argVals = new ArrayList<>(rc.args.
+          +size());                                                      
+      251 +                for (Ast.Expr arg : rc.args) argVals.add(evalE
+          +xpr(arg));                                                    
+      252                  Map<String, Value> savedEnv = new LinkedHashMa
+           p<>(env);
+      253                  for (int i = 0; i < rd.params.size(); i++) {
+      252 -                    env.put(rd.params.get(i).name, liftQuantit
+          -y(rc.args.get(i)));                                           
+      254 +                    env.put(rd.params.get(i).name, argVals.get
+          +(i));                                                         
+      255                  }
+      256 +                double rkPerSec = (rd.progress == null) ? 0.0 
+          +: evalRateMassTime(rd.progress.rate).v;                       
+      257                  for (Ast.ExerciseDecl e : rd.exercises) {
+      258                      out.exercises.add(evalExercise(e, rkPerSec
+           , offsetSec));
+      259                  }
+     ...
+      269          r.label  = e.label;
+      270          r.sets   = e.sets;
+      271          r.reps   = e.reps;
+      269 -        double base_g = ((MassV) liftQuantity(e.weight)).g;   
+      272 +        double base_g = evalMass(e.weight).g;                 
+      273          r.weight = new MassV(base_g + progressGPerSec * offset
+           Sec);
+      274          return r;
+      275      }
+
+● Update(src\fitlang\Interpreter.java)
+  ⎿  Added 1 line, removed 1 line
+      280          Plan.MealResult out = new Plan.MealResult();
+      281          out.label = m.label;
+      282          for (Ast.MacroDecl md : m.macros) {
+      283 -            out.macros.put(md.name, (MassV) liftQuantity(md.qu
+          -antity));                                                     
+      283 +            out.macros.put(md.name, evalMass(md.value));      
+      284          }
+      285          return out;
+      286      }
+
+● Update(src\fitlang\Interpreter.java)
+  ⎿  Added 2 lines, removed 2 lines
+      305          Plan.TargetResult r = new Plan.TargetResult();
+      306          r.macro = t.macro;
+      307          r.relOp = t.relOp;
+      308 -        r.thresholdEcho = echoQuantity(t.qty);                
+      308  
+      310 -        double threshold_g = toCanonical(t.qty.value, t.qty.un
+          -it);                                                          
+      309 +        double threshold_g = evalMass(t.qty).g;               
+      310 +        r.thresholdEcho = fmt(threshold_g) + " g";            
+      311          if (t.perUnit != null) {
+      312              // "qty per perUnit of bodyweight" → multiply by b
+           odyweight / 1-of-perUnit
+      313              double perUnitCanonical = toCanonical(1.0, t.perUn
+           it);
+
+● Update(src\fitlang\AstDumper.java)
+  ⎿  Added 7 lines
+      31          push();
+      32          dumpAthleteParams(b.params);
+      33          for (Ast.RoutineDecl r : b.routines) dumpRoutineDecl(r)
+          ;
+      34 +        if (!b.lets.isEmpty()) {                               
+      35 +            line("LetSection");                                
+      36 +            push();                                            
+      37 +            for (Ast.LetDecl ld : b.lets)                      
+      38 +                line("LetDecl " + ld.name + " = " + exprStr(ld.
+         +expr));                                                        
+      39 +            pop();                                             
+      40 +        }                                                      
+      41          for (Ast.WorkoutDecl w : b.workouts) dumpWorkoutDecl(w)
+          ;
+      42          for (Ast.MealDecl   m : b.meals)    dumpMealDecl(m);
+      43          if (!b.rules.isEmpty()) {
+
+● Update(src\fitlang\AstDumper.java)
+  ⎿  Added 5 lines, removed 6 lines
+      66              else if (it instanceof Ast.RoutineCall) dumpRoutine
+          Call((Ast.RoutineCall) it);
+      67          }
+      68          if (w.progress != null)
+      69 -            line("ProgressStmt rate=" + w.progress.rate);      
+      69 +            line("ProgressStmt rate=" + exprStr(w.progress.rate
+         +));                                                            
+      70          pop();
+      71      }
+      72  
+     ...
+      82          push();
+      83          for (Ast.ExerciseDecl e : r.exercises) dumpExerciseDecl
+          (e);
+      84          if (r.progress != null)
+      85 -            line("ProgressStmt rate=" + r.progress.rate);      
+      85 +            line("ProgressStmt rate=" + exprStr(r.progress.rate
+         +));                                                            
+      86          pop();
+      87      }
+      88  
+     ...
+      90          StringBuilder args = new StringBuilder();
+      91          for (int i = 0; i < c.args.size(); i++) {
+      92              if (i > 0) args.append(", ");
+      93 -            Ast.Quantity q = c.args.get(i);                    
+      94 -            args.append(q).append(" [").append(q.family).append
+         -("]");                                                         
+      93 +            args.append(exprStr(c.args.get(i)));               
+      94          }
+      95          line("RoutineCall \"" + c.label + "\" (" + args + ")");
+      96      }
+     ...
+      100          push();
+      101          line("sets   : " + e.sets);
+      102          line("reps   : " + e.reps);
+      104 -        line("weight : " + e.weight + "  [" + e.weight.family 
+          -+ "]");                                                       
+      103 +        line("weight : " + exprStr(e.weight));                
+      104          pop();
+      105      }
+      106  
+     ...
+      109          push();
+      110          for (Ast.MacroDecl mc : m.macros)
+      111              line("MacroDecl " + mc.name.name().toLowerCase()
+      113 -                 + " : " + mc.quantity + "  [" + mc.quantity.f
+          -amily + "]");                                                 
+      112 +                 + " : " + exprStr(mc.value));                
+      113          pop();
+      114      }
+      115  
+
+● Update(src\fitlang\AstDumper.java)
+  ⎿  Added 4 lines, removed 5 lines
+      120                  ? " per " + t.perUnit + " of bodyweight"
+      121                  : "";
+      122              line("TargetDecl "
+      123 -                 + t.macro.name().toLowerCase() + " " + t.relO
+          -p + " " + t.qty + perSuffix);                                 
+      123 +                 + t.macro.name().toLowerCase() + " " + t.relO
+          +p + " "                                                       
+      124 +                 + exprStr(t.qty) + perSuffix);               
+      125          } else if (r instanceof Ast.GoalRateDecl) {
+      126              Ast.GoalRateDecl g = (Ast.GoalRateDecl) r;
+      126 -            line("GoalRateDecl " + g.direction.name().toLowerC
+          -ase() + " " + g.rate);                                        
+      127 -        } else if (r instanceof Ast.LetDecl) {                
+      128 -            Ast.LetDecl ld = (Ast.LetDecl) r;                 
+      129 -            line("LetDecl " + ld.name + " = " + exprStr(ld.exp
+          -r));                                                          
+      127 +            line("GoalRateDecl " + g.direction.name().toLowerC
+          +ase()                                                         
+      128 +                 + " " + exprStr(g.rate));                    
+      129          } else if (r instanceof Ast.WhenDecl) {
+      130              Ast.WhenDecl w = (Ast.WhenDecl) r;
+      131              line("WhenDecl goal=" + w.mode.name().toLowerCase(
+           ));
+
+● Now update the samples that have lets in the rules section:
+
+● Update(samples\valid_03_diet_only.fl)
+  ⎿  Added 2 lines
+      1  # Diet-only program — no workout section (a client tracking nutr
+         ition only)
+      2  athlete(bodyweight: 65 kg, goal: maintain) {
+      3  
+      4 +    let dailyProtein = 30 g + 50 g + 45 g                       
+      5 +                                                                
+      6      meal "Breakfast" {
+      7          protein: 30 g
+      8          carbs:   60 g
+
+● Update(samples\valid_03_diet_only.fl)
+  ⎿  Removed 2 lines
+      21          fat:     18 g
+      22      }
+      23  
+      24 -    let dailyProtein = 30 g + 50 g + 45 g                      
+      25 -                                                               
+      24      target protein >= 1.6 g per kg of bodyweight
+      25      target fat <= 0.8 g per kg of bodyweight
+      26  
+
+● Now invalid_typeerror.fl — move its lets to prefix:
+
+● Update(samples\invalid_typeerror.fl)
+  ⎿  Added 5 lines, removed 5 lines
+      16  
+      17  athlete(bodyweight: 78 kg, goal: bulk) {
+      18  
+      19 +    let bad_sum   = 80 kg + 200 kcal                           
+         +  # 4                                                          
+      20 +    let bad_div   = 80 kg / 2 kg                               
+         +  # 5                                                          
+      21 +    let bad_mul   = 80 kg * 2 kg                               
+         +  # 6                                                          
+      22 +    let bad_ident = unknownVar                                 
+         +  # 7                                                          
+      23 +                                                               
+      24      workout "Push Day" {
+      25          exercise "Bench" { sets: 4, reps: 6, weight: 80 kcal } 
+            # 1
+      26          progress weight 2.5 kcal/week                          
+            # 2
+     ...
+      30          protein: 40 kcal                                       
+            # 3
+      31      }
+      32  
+      28 -    let bad_sum   = 80 kg + 200 kcal                           
+         -  # 4                                                          
+      29 -    let bad_div   = 80 kg / 2 kg                               
+         -  # 5                                                          
+      30 -    let bad_mul   = 80 kg * 2 kg                               
+         -  # 6                                                          
+      31 -    let bad_ident = unknownVar                                 
+         -  # 7                                                          
+      32 -                                                               
+      33      target protein >= 1.8 g per kcal of bodyweight             
+            # 8
+      34      goal gain 0.25 g/kg                                        
+            # 9
+      35  
+● PowerShell(.\compile.bat 2>&1 | Select-Object -Last 30)
+  ⎿  Build successful.
+
+● Clean build. Regression test:
+
+● PowerShell(foreach ($f in Get-ChildItem samples/valid_*.fl) { Write-Host "===
+            $($f.Name) ==="; java -cp out fitlang.Main $f.FullName --run 2>&1 |
+            Select-Object -First 6 })
+  ⎿  Error: Exit code 255
+     === valid_01_full.fl ===
+     FitLang Plan
+       Athlete: bodyweight = 78 kg, goal = bulk
+       Horizon: 1 week
+       Goal rate: gain at 0.5 kg/week
+       Week 1 (bodyweight = 78 kg):
+         Workouts:
+     === valid_02_workout_only.fl ===
+     FitLang Plan
+     … +19 lines (ctrl+o to expand)
+
+● PowerShell(java -cp out fitlang.Main samples/invalid_typeerror.fl 2>&1)
+  ⎿  Error: Exit code 1
+     java : Type errors in 'samples/invalid_typeerror.fl':
+     At line:1 char:1
+     + java -cp out fitlang.Main samples/invalid_typeerror.fl 2>&1
+     + ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+         + CategoryInfo          : NotSpecified: (Type errors in 
+     ..._typeerror.fl'::String) [], RemoteException
+         + FullyQualifiedErrorId : NativeCommandError
+      
+       - let bad_sum: operator '+' is not defined on Quantity(MASS) and 
+     Quantity(ENERGY) (§4.5.4–§4.5.5)
+       - let bad_div: operator '/' is not defined on Quantity(MASS) and 
+     Quantity(MASS) (§4.5.4–§4.5.5)
+
+     … +8 lines (ctrl+o to expand)
+
+● All 10 expected diagnostics fire. Now the actual P2 capability test — let
+  actually used:
+
+● Write(samples\valid_05_expressions.fl)
+  ⎿  Wrote 25 lines to samples\valid_05_expressions.fl
+         , and rate slots.ngs are now usable inside workout, meal, target
+       2 athlete(bodyweight: 80 kg, goal: bulk) {
+       3 
+       4     let benchBase   = 80 kg
+       5     let plateStep   = 2.5 kg
+       7     let proteinPerMeal = 40 gweek
+       8 
+       9     workout "Push Day" {
+      10         exercise "Bench Press"    { sets: 4, reps: 6, weight: be
+         nchBase + 2 * plateStep }
+     … +18 lines (ctrl+o to expand)
+
+● PowerShell(java -cp out fitlang.Main samples/valid_05_expressions.fl --run
+            2>&1)
+  ⎿  Error: Exit code 1
+     java : Type errors in 'samples/valid_05_expressions.fl':
+     At line:1 char:1
+     + java -cp out fitlang.Main samples/valid_05_expressions.fl --run 2>&1
+     + ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+         + CategoryInfo          : NotSpecified: (Type errors in 
+     ...xpressions.fl'::String) [], RemoteException
+         + FullyQualifiedErrorId : NativeCommandError
+      
+       - workout "Push Day" progress rate: operator '/' is not defined on 
+     Quantity(MASS) and Quantity(TIME) (§4.5.4–§4.5.5)
+
+● The type system doesn't admit Mass / Time → Rate (only Number division). Let
+  me adjust the sample to use a let-bound rate instead:
+
+● Update(samples\valid_05_expressions.fl)
+  ⎿  Added 2 lines, removed 1 line
+       3  
+       4      let benchBase   = 80 kg
+       5      let plateStep   = 2.5 kg
+       6 +    let progRate    = 2.5 kg/week                              
+       7      let weeklyGain  = 0.5 kg/week
+       8      let proteinPerMeal = 40 g
+       9  
+      10      workout "Push Day" {
+      11          exercise "Bench Press"    { sets: 4, reps: 6, weight: b
+          enchBase + 2 * plateStep }
+      12          exercise "Overhead Press" { sets: 3, reps: 8, weight: b
+          enchBase - 30 kg }
+      12 -        progress weight plateStep / 1 week                     
+      13 +        progress weight progRate                               
+      14      }
+      15  
+      16      meal "Breakfast" {
+
+● PowerShell(java -cp out fitlang.Main samples/valid_05_expressions.fl --run
+            2>&1)
+  ⎿  FitLang Plan
+       Athlete: bodyweight = 80 kg, goal = bulk
+       Horizon: 3 week
+     … +25 lines (ctrl+o to expand)
+
+● Expressions in slots all evaluate correctly. Let me run full regression:
+
+● PowerShell($ok=0; $bad=0; foreach ($f in Get-ChildItem samples/valid_*.fl) {
+            $out = java -cp out fitlang.Main $f.FullName 2>&1; if ($LASTEXITCODE
+             -eq 0) { Write-Host "PASS…)
+  ⎿  PASS valid_01_full.fl
+     PASS valid_02_workout_only.fl
+     PASS valid_03_diet_only.fl
+     … +3 lines (ctrl+o to expand)
+
+● PowerShell($bad=0; $ok=0; foreach ($f in Get-ChildItem samples/invalid_*.fl,
+            samples/malformed_*.fl) { java -cp out fitlang.Main $f.FullName 2>&1
+             | Out-Null; if ($LASTEXIT…)
+  ⎿  Error: Exit code 1
+     PASS (rejected) invalid_typeerror.fl
+     PASS (rejected) malformed_01_empty_body.fl
+     PASS (rejected) malformed_02_empty_workout.fl
+     PASS (rejected) malformed_03_missing_schedule.fl
+     PASS (rejected) malformed_04_bad_goal_mode.fl
+     PASS (rejected) malformed_05_unterminated_string.fl
+     expected-rejects passed=6 failed=0
+
+● PowerShell(java -cp out fitlang.Main samples/valid_05_expressions.fl
+            --dump-ast 2>&1 | Select-Object -First 35)
+  ⎿  AthleteBlock
+       AthleteParams
+         bodyweight : 80.0 kg  [MASS]
+     … +26 lines (ctrl+o to expand)
+
+● §4.7 fully wired. Let me write the journal entry:
+
+● Write(docs\ai-journal\entries\13_2026-05-18_section-4-7.md)
+  ⎿  Wrote 136 lines to
+     docs\ai-journal\entries\13_2026-05-18_section-4-7.md
+       2 entry: 13
+       3 date: 2026-05-18
+       4 phase: Parser | Type checker | Interpreter
+       5 ai_tool: Claude Opus 4.7
+       6 ---
+       7 
+       8 # Entry 13 — §4.7 expression-bodied slots and the prefix let-sec
+         tion
+       9 
+      10 ## Goal
+     … +184 lines (ctrl+o to expand)
+
+● Bash(git add -A && git status --short)
+  ⎿  warning: in the working copy of 'samples/invalid_typeerror.fl', LF wil
+     l be replaced by CRLF the next time Git touches it
+     warning: in the working copy of 'samples/valid_03_diet_only.fl', LF wi
+     … +18 lines (ctrl+o to expand)
+
+● Bash(git commit -m "$(cat <<'EOF'
+      P2: widen value slots to expressions, lift let into prefix section
+      (§4.7)…)
+  ⎿  [main c651c54] P2: widen value slots to expressions, lift let into pre
+     fix section (§4.7)
+      9 files changed, 307 insertions(+), 115 deletions(-)
+     … +8 lines (ctrl+o to expand)
+
+● Bash(git push)
+  ⎿  To https://github.com/M-Pasa/PL_Project.git
+        a81fa11..c651c54  main -> main
+
+● Pushed c651c54. §4.7 shipped.
+
+  Updated P2 status
+  - §4.4, §4.4.8 multi-week, §4.5, §4.7 — done.
+  - Left for P2: §4.8 Design Rationale write-up, D3 P2-sample doc updates, D4
+  Part 2 retrospective, D5 Part 2 retrospective, today's raw session save, quiz
+  prep (2026-05-28).
+
+  Code work is essentially complete; the rest is documentation. Want to tackle
+  §4.8 next, or stop here for the day?
+✻ Crunched for 11m 36s
+
+❯ stop here for today                                                           
+
+● Sounds good. Two outstanding housekeeping items if you want to handle them
+  before closing:
+
+  1. Today's raw session — docs/ai-journal/raw_sessions/2026-05-18-... for this
+  conversation (multi-week + §4.7). Past pattern is you paste the terminal log
+  yourself.
+  2. Memory — nothing surprising came up that needs saving; the simplicity rule,
+   journal-authenticity rule, and design-options-need-real-language-examples all
+   held and are already in memory.
+
+  Shipped today: a81fa11 (plan N week, journal 12) and c651c54 (§4.7 expression
+  slots + prefix let-section, journal 13). Tree clean, pushed.
+
+✻ Cogitated for 9s
