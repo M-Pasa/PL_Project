@@ -79,6 +79,10 @@ public final class Parser {
         List<Ast.RoutineDecl> routines = new ArrayList<>();
         while (check(Token.Type.ROUTINE)) routines.add(parseRoutineDecl());
 
+        // §4.7 let-section — bindings visible in workout/meal bodies and rules.
+        List<Ast.LetDecl> lets = new ArrayList<>();
+        while (check(Token.Type.LET)) lets.add(parseLetDecl());
+
         // <body-sections> → <plan-section> [ <intake-section> ] | <intake-section>
         List<Ast.WorkoutDecl> workouts = new ArrayList<>();
         List<Ast.MealDecl>    meals    = new ArrayList<>();
@@ -103,13 +107,12 @@ public final class Parser {
         Ast.ScheduleStmt schedule = parseScheduleStmt();
         expect(Token.Type.RBRACE);
 
-        return new Ast.AthleteBlock(params, routines, workouts, meals, rules, schedule);
+        return new Ast.AthleteBlock(params, routines, lets, workouts, meals, rules, schedule);
     }
 
     private boolean isRuleStart(Token.Type t) {
         return t == Token.Type.TARGET
             || t == Token.Type.GOAL
-            || t == Token.Type.LET
             || t == Token.Type.WHEN;
     }
 
@@ -208,16 +211,16 @@ public final class Parser {
             nameTok.lexeme, unitTok.lexeme, Ast.familyOf(unitTok.type));
     }
 
-    // <routine-call> → "use" STRING_LIT "(" <quantity> { "," <quantity> } ")"
+    // <routine-call> → "use" STRING_LIT "(" <expression> { "," <expression> } ")"
     private Ast.RoutineCall parseRoutineCall() {
         expect(Token.Type.USE);
         String label = expect(Token.Type.STRING_LIT).lexeme;
         expect(Token.Type.LPAREN);
-        List<Ast.Quantity> args = new ArrayList<>();
-        args.add(parseQuantity());
+        List<Ast.Expr> args = new ArrayList<>();
+        args.add(parseExpression());
         while (check(Token.Type.COMMA)) {
             advance();
-            args.add(parseQuantity());
+            args.add(parseExpression());
         }
         expect(Token.Type.RPAREN);
         return new Ast.RoutineCall(label, args);
@@ -226,7 +229,7 @@ public final class Parser {
     // <exercise-decl> → "exercise" STRING_LIT "{"
     //                       "sets" ":" NUM_LIT ","
     //                       "reps" ":" NUM_LIT ","
-    //                       "weight" ":" <quantity>
+    //                       "weight" ":" <expression>
     //                   "}"
     private Ast.ExerciseDecl parseExerciseDecl() {
         expect(Token.Type.EXERCISE);
@@ -247,7 +250,7 @@ public final class Parser {
 
         expect(Token.Type.WEIGHT);
         expect(Token.Type.COLON);
-        Ast.Quantity weight = parseQuantity();
+        Ast.Expr weight = parseExpression();
 
         expect(Token.Type.RBRACE);
 
@@ -265,11 +268,11 @@ public final class Parser {
         return (int) d;
     }
 
-    // <progress-stmt> → "progress" "weight" <rate>
+    // <progress-stmt> → "progress" "weight" <expression>
     private Ast.ProgressStmt parseProgressStmt() {
         expect(Token.Type.PROGRESS);
         expect(Token.Type.WEIGHT);
-        return new Ast.ProgressStmt(parseRate());
+        return new Ast.ProgressStmt(parseExpression());
     }
 
     // <meal-decl> → "meal" STRING_LIT "{" <macro-decl>+ "}"
@@ -295,7 +298,7 @@ public final class Parser {
         return t == Token.Type.PROTEIN || t == Token.Type.CARBS || t == Token.Type.FAT;
     }
 
-    // <macro-decl> → <macro-name> ":" <quantity>
+    // <macro-decl> → <macro-name> ":" <expression>
     // <macro-name>  → "protein" | "carbs" | "fat"
     private Ast.MacroDecl parseMacroDecl() {
         Token t = peek();
@@ -308,20 +311,20 @@ public final class Parser {
                 throw new FitLangException("Expected macro name (protein/carbs/fat)", t.line, t.col);
         }
         expect(Token.Type.COLON);
-        return new Ast.MacroDecl(name, parseQuantity());
+        return new Ast.MacroDecl(name, parseExpression());
     }
 
-    // <rule-decl> → <target-decl> | <goal-rate-decl> | <let-decl> | <when-decl>
+    // <rule-decl> → <target-decl> | <goal-rate-decl> | <when-decl>
+    // (§4.7: <let-decl> lives in the prefix let-section, not the rules section.)
     private Ast.RuleDecl parseRuleDecl() {
         switch (peek().type) {
             case TARGET: return parseTargetDecl();
             case GOAL:   return parseGoalRateDecl();
-            case LET:    return parseLetDecl();
             case WHEN:   return parseWhenDecl();
             default:
                 Token t = peek();
                 throw new FitLangException(
-                    "Expected rule declaration (target/goal/let/when)", t.line, t.col);
+                    "Expected rule declaration (target/goal/when)", t.line, t.col);
         }
     }
 
@@ -349,7 +352,7 @@ public final class Parser {
         return new Ast.WhenDecl(mode, thenRules, elseRules);
     }
 
-    // <target-decl> → "target" <macro-name> <rel-op> <quantity>
+    // <target-decl> → "target" <macro-name> <rel-op> <expression>
     //                     [ "per" UNIT "of" "bodyweight" ]
     private Ast.TargetDecl parseTargetDecl() {
         expect(Token.Type.TARGET);
@@ -364,7 +367,7 @@ public final class Parser {
                     "Expected macro name (protein/carbs/fat) after 'target'", macroTok.line, macroTok.col);
         }
         String relOp = parseRelOp();
-        Ast.Quantity qty = parseQuantity();
+        Ast.Expr qty = parseExpression();
 
         String perUnit = null;
         Ast.UnitFamily perFamily = null;
@@ -394,7 +397,7 @@ public final class Parser {
         }
     }
 
-    // <goal-rate-decl> → "goal" <direction> <rate>
+    // <goal-rate-decl> → "goal" <direction> <expression>
     // <direction>       → "lose" | "gain"
     private Ast.GoalRateDecl parseGoalRateDecl() {
         expect(Token.Type.GOAL);
@@ -407,7 +410,7 @@ public final class Parser {
                 throw new FitLangException(
                     "Expected direction 'lose' or 'gain' after 'goal'", t.line, t.col);
         }
-        return new Ast.GoalRateDecl(dir, parseRate());
+        return new Ast.GoalRateDecl(dir, parseExpression());
     }
 
     // <let-decl> → "let" IDENT "=" <expression>
@@ -480,18 +483,6 @@ public final class Parser {
             Double.parseDouble(numTok.lexeme),
             unitTok.lexeme,
             Ast.familyOf(unitTok.type));
-    }
-
-    // <rate> → NUM_LIT UNIT "/" UNIT
-    private Ast.Rate parseRate() {
-        Token numTok   = expect(Token.Type.NUM_LIT);
-        Token numerTok = expectUnit();
-        expect(Token.Type.SLASH);
-        Token denomTok = expectUnit();
-        return new Ast.Rate(
-            Double.parseDouble(numTok.lexeme),
-            numerTok.lexeme, Ast.familyOf(numerTok.type),
-            denomTok.lexeme, Ast.familyOf(denomTok.type));
     }
 
     // <expression> → <add-expr>                                    (§4.7.1)

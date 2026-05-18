@@ -119,12 +119,12 @@ public final class Ast {
     public interface WorkoutItem {}
 
     public static final class ExerciseDecl implements WorkoutItem {
-        public final String   label;
-        public final int      sets;
-        public final int      reps;
-        public final Quantity weight;
+        public final String label;
+        public final int    sets;
+        public final int    reps;
+        public final Expr   weight;     // §4.7: any expression of type Quantity(MASS)
 
-        public ExerciseDecl(String label, int sets, int reps, Quantity weight) {
+        public ExerciseDecl(String label, int sets, int reps, Expr weight) {
             this.label  = label;
             this.sets   = sets;
             this.reps   = reps;
@@ -160,18 +160,18 @@ public final class Ast {
     }
 
     public static final class RoutineCall implements WorkoutItem {
-        public final String         label;
-        public final List<Quantity> args;
+        public final String     label;
+        public final List<Expr> args;   // §4.7: each must match the declared param family
 
-        public RoutineCall(String label, List<Quantity> args) {
+        public RoutineCall(String label, List<Expr> args) {
             this.label = label;
             this.args  = args;
         }
     }
 
     public static final class ProgressStmt {
-        public final Rate rate;
-        public ProgressStmt(Rate rate) { this.rate = rate; }
+        public final Expr rate;          // §4.7: any expression of type Rate(MASS, TIME)
+        public ProgressStmt(Expr rate) { this.rate = rate; }
     }
 
     public static final class WorkoutDecl {
@@ -188,11 +188,11 @@ public final class Ast {
 
     public static final class MacroDecl {
         public final MacroName name;
-        public final Quantity  quantity;
+        public final Expr      value;    // §4.7: any expression of type Quantity(MASS)
 
-        public MacroDecl(MacroName name, Quantity quantity) {
-            this.name     = name;
-            this.quantity = quantity;
+        public MacroDecl(MacroName name, Expr value) {
+            this.name  = name;
+            this.value = value;
         }
     }
 
@@ -213,11 +213,11 @@ public final class Ast {
     public static final class TargetDecl implements RuleDecl {
         public final MacroName  macro;
         public final String     relOp;
-        public final Quantity   qty;
-        public final String     perUnit;    // null if no "per X of bodyweight"
-        public final UnitFamily perFamily;  // null iff perUnit is null
+        public final Expr       qty;       // §4.7: any expression of type Quantity(MASS)
+        public final String     perUnit;   // null if no "per X of bodyweight"
+        public final UnitFamily perFamily; // null iff perUnit is null
 
-        public TargetDecl(MacroName macro, String relOp, Quantity qty,
+        public TargetDecl(MacroName macro, String relOp, Expr qty,
                           String perUnit, UnitFamily perFamily) {
             this.macro     = macro;
             this.relOp     = relOp;
@@ -229,9 +229,9 @@ public final class Ast {
 
     public static final class GoalRateDecl implements RuleDecl {
         public final Direction direction;
-        public final Rate      rate;
+        public final Expr      rate;     // §4.7: any expression of type Rate(MASS, TIME)
 
-        public GoalRateDecl(Direction direction, Rate rate) {
+        public GoalRateDecl(Direction direction, Expr rate) {
             this.direction = direction;
             this.rate      = rate;
         }
@@ -253,7 +253,13 @@ public final class Ast {
         }
     }
 
-    public static final class LetDecl implements RuleDecl {
+    /**
+     * §4.7 let-section: between routine declarations and the body sections.
+     * No longer a RuleDecl — lets live in a dedicated prefix so their
+     * bindings are visible inside workout and meal bodies as well as inside
+     * the rules section that follows.
+     */
+    public static final class LetDecl {
         public final String name;
         public final Expr   expr;
 
@@ -292,16 +298,19 @@ public final class Ast {
     public static final class AthleteBlock {
         public final AthleteParams     params;
         public final List<RoutineDecl> routines;
+        public final List<LetDecl>     lets;        // §4.7 prefix let-section
         public final List<WorkoutDecl> workouts;
         public final List<MealDecl>    meals;
         public final List<RuleDecl>    rules;
         public final ScheduleStmt      schedule;
 
         public AthleteBlock(AthleteParams params, List<RoutineDecl> routines,
-                            List<WorkoutDecl> workouts, List<MealDecl> meals,
-                            List<RuleDecl> rules, ScheduleStmt schedule) {
+                            List<LetDecl> lets, List<WorkoutDecl> workouts,
+                            List<MealDecl> meals, List<RuleDecl> rules,
+                            ScheduleStmt schedule) {
             this.params   = params;
             this.routines = routines;
+            this.lets     = lets;
             this.workouts = workouts;
             this.meals    = meals;
             this.rules    = rules;

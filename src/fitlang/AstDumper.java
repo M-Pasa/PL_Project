@@ -31,6 +31,13 @@ public final class AstDumper {
         push();
         dumpAthleteParams(b.params);
         for (Ast.RoutineDecl r : b.routines) dumpRoutineDecl(r);
+        if (!b.lets.isEmpty()) {
+            line("LetSection");
+            push();
+            for (Ast.LetDecl ld : b.lets)
+                line("LetDecl " + ld.name + " = " + exprStr(ld.expr));
+            pop();
+        }
         for (Ast.WorkoutDecl w : b.workouts) dumpWorkoutDecl(w);
         for (Ast.MealDecl   m : b.meals)    dumpMealDecl(m);
         if (!b.rules.isEmpty()) {
@@ -59,7 +66,7 @@ public final class AstDumper {
             else if (it instanceof Ast.RoutineCall) dumpRoutineCall((Ast.RoutineCall) it);
         }
         if (w.progress != null)
-            line("ProgressStmt rate=" + w.progress.rate);
+            line("ProgressStmt rate=" + exprStr(w.progress.rate));
         pop();
     }
 
@@ -75,7 +82,7 @@ public final class AstDumper {
         push();
         for (Ast.ExerciseDecl e : r.exercises) dumpExerciseDecl(e);
         if (r.progress != null)
-            line("ProgressStmt rate=" + r.progress.rate);
+            line("ProgressStmt rate=" + exprStr(r.progress.rate));
         pop();
     }
 
@@ -83,8 +90,7 @@ public final class AstDumper {
         StringBuilder args = new StringBuilder();
         for (int i = 0; i < c.args.size(); i++) {
             if (i > 0) args.append(", ");
-            Ast.Quantity q = c.args.get(i);
-            args.append(q).append(" [").append(q.family).append("]");
+            args.append(exprStr(c.args.get(i)));
         }
         line("RoutineCall \"" + c.label + "\" (" + args + ")");
     }
@@ -94,7 +100,7 @@ public final class AstDumper {
         push();
         line("sets   : " + e.sets);
         line("reps   : " + e.reps);
-        line("weight : " + e.weight + "  [" + e.weight.family + "]");
+        line("weight : " + exprStr(e.weight));
         pop();
     }
 
@@ -103,7 +109,7 @@ public final class AstDumper {
         push();
         for (Ast.MacroDecl mc : m.macros)
             line("MacroDecl " + mc.name.name().toLowerCase()
-                 + " : " + mc.quantity + "  [" + mc.quantity.family + "]");
+                 + " : " + exprStr(mc.value));
         pop();
     }
 
@@ -114,13 +120,12 @@ public final class AstDumper {
                 ? " per " + t.perUnit + " of bodyweight"
                 : "";
             line("TargetDecl "
-                 + t.macro.name().toLowerCase() + " " + t.relOp + " " + t.qty + perSuffix);
+                 + t.macro.name().toLowerCase() + " " + t.relOp + " "
+                 + exprStr(t.qty) + perSuffix);
         } else if (r instanceof Ast.GoalRateDecl) {
             Ast.GoalRateDecl g = (Ast.GoalRateDecl) r;
-            line("GoalRateDecl " + g.direction.name().toLowerCase() + " " + g.rate);
-        } else if (r instanceof Ast.LetDecl) {
-            Ast.LetDecl ld = (Ast.LetDecl) r;
-            line("LetDecl " + ld.name + " = " + exprStr(ld.expr));
+            line("GoalRateDecl " + g.direction.name().toLowerCase()
+                 + " " + exprStr(g.rate));
         } else if (r instanceof Ast.WhenDecl) {
             Ast.WhenDecl w = (Ast.WhenDecl) r;
             line("WhenDecl goal=" + w.mode.name().toLowerCase());

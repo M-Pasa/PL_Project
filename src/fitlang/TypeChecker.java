@@ -95,6 +95,9 @@ public final class TypeChecker {
             checkRoutineDecl(r);
         }
 
+        // §4.7 prefix let-section — bindings visible in workout/meal bodies and rules.
+        for (Ast.LetDecl ld : b.lets) checkLetDecl(ld);
+
         for (Ast.WorkoutDecl w : b.workouts) {
             if (workoutLabels.contains(w.label))
                 err("duplicate workout label \"" + w.label + "\"");
@@ -119,6 +122,10 @@ public final class TypeChecker {
     // ── Declarations ─────────────────────────────────────────────────────────
 
     private void checkRoutineDecl(Ast.RoutineDecl r) {
+        // Routine bodies are templates: their exercise weights and the progress
+        // rate are typed in the athlete env (no routine-parameter binding yet —
+        // that happens at the call site). Per-call argument family-match is
+        // enforced separately in checkRoutineCall.
         for (Ast.ExerciseDecl e : r.exercises) checkExerciseDecl(e, "routine \"" + r.label + "\"");
         if (r.progress != null) checkProgressRate(r.progress.rate, "routine \"" + r.label + "\"");
     }
@@ -134,15 +141,21 @@ public final class TypeChecker {
     }
 
     private void checkExerciseDecl(Ast.ExerciseDecl e, String where) {
-        if (e.weight.family != UnitFamily.MASS)
-            err(where + " exercise \"" + e.label + "\": weight must be Mass, got "
-                + e.weight + " [" + e.weight.family + "]");
+        String ctx = where + " exercise \"" + e.label + "\" weight";
+        FType t = checkExpr(e.weight, ctx);
+        if (t == null) return;
+        if (!(t instanceof TQuantity) || ((TQuantity) t).fam != UnitFamily.MASS)
+            err(ctx + ": must be Quantity(MASS), got " + t);
     }
 
-    private void checkProgressRate(Ast.Rate r, String where) {
-        if (r.numerFamily != UnitFamily.MASS || r.denomFamily != UnitFamily.TIME)
-            err(where + " progress rate must be Rate(Mass, Time), got " + r
-                + " [Rate(" + r.numerFamily + "," + r.denomFamily + ")]");
+    private void checkProgressRate(Ast.Expr rateExpr, String where) {
+        String ctx = where + " progress rate";
+        FType t = checkExpr(rateExpr, ctx);
+        if (t == null) return;
+        if (!(t instanceof TRate)
+            || ((TRate) t).numer != UnitFamily.MASS
+            || ((TRate) t).denom != UnitFamily.TIME)
+            err(ctx + ": must be Rate(MASS, TIME), got " + t);
     }
 
     private void checkRoutineCall(Ast.RoutineCall c) {
@@ -157,27 +170,28 @@ public final class TypeChecker {
             return;
         }
         for (int i = 0; i < c.args.size(); i++) {
-            UnitFamily got    = c.args.get(i).family;
+            String ctx = "routine call \"" + c.label + "\" argument " + (i + 1)
+                + " (" + decl.params.get(i).name + ")";
+            FType t = checkExpr(c.args.get(i), ctx);
+            if (t == null) continue;
             UnitFamily wanted = decl.params.get(i).family;
-            if (got != wanted)
-                err("routine call \"" + c.label + "\" argument " + (i + 1)
-                    + " (" + decl.params.get(i).name + "): expected "
-                    + wanted + ", got " + got);
+            if (!(t instanceof TQuantity) || ((TQuantity) t).fam != wanted)
+                err(ctx + ": expected Quantity(" + wanted + "), got " + t);
         }
     }
 
     private void checkMealDecl(Ast.MealDecl m) {
         for (Ast.MacroDecl mc : m.macros) {
-            if (mc.quantity.family != UnitFamily.MASS)
-                err("meal \"" + m.label + "\": macro "
-                    + mc.name.name().toLowerCase() + " must be Mass, got "
-                    + mc.quantity + " [" + mc.quantity.family + "]");
+            String ctx = "meal \"" + m.label + "\" macro " + mc.name.name().toLowerCase();
+            FType t = checkExpr(mc.value, ctx);
+            if (t == null) continue;
+            if (!(t instanceof TQuantity) || ((TQuantity) t).fam != UnitFamily.MASS)
+                err(ctx + ": must be Quantity(MASS), got " + t);
         }
     }
 
     private void checkRuleDecl(Ast.RuleDecl r, Ast.GoalMode goalMode) {
-        if (r instanceof Ast.LetDecl)        checkLetDecl((Ast.LetDecl) r);
-        else if (r instanceof Ast.TargetDecl)   checkTargetDecl((Ast.TargetDecl) r);
+        if      (r instanceof Ast.TargetDecl)   checkTargetDecl((Ast.TargetDecl) r);
         else if (r instanceof Ast.GoalRateDecl) checkGoalRateDecl((Ast.GoalRateDecl) r, goalMode);
         else if (r instanceof Ast.WhenDecl)     checkWhenDecl((Ast.WhenDecl) r, goalMode);
     }
@@ -195,18 +209,22 @@ public final class TypeChecker {
     }
 
     private void checkTargetDecl(Ast.TargetDecl t) {
-        if (t.qty.family != UnitFamily.MASS)
-            err("target " + t.macro.name().toLowerCase()
-                + ": threshold must be Mass, got " + t.qty + " [" + t.qty.family + "]");
+        String ctx = "target " + t.macro.name().toLowerCase() + " threshold";
+        FType ty = checkExpr(t.qty, ctx);
+        if (ty != null && (!(ty instanceof TQuantity) || ((TQuantity) ty).fam != UnitFamily.MASS))
+            err(ctx + ": must be Quantity(MASS), got " + ty);
         if (t.perUnit != null && t.perFamily != UnitFamily.MASS)
             err("target " + t.macro.name().toLowerCase()
                 + ": 'per " + t.perUnit + " of bodyweight' unit must be a Mass unit");
     }
 
     private void checkGoalRateDecl(Ast.GoalRateDecl g, Ast.GoalMode goalMode) {
-        if (g.rate.numerFamily != UnitFamily.MASS || g.rate.denomFamily != UnitFamily.TIME)
-            err("goal " + g.direction.name().toLowerCase()
-                + ": rate must be Rate(Mass, Time), got " + g.rate);
+        String ctx = "goal " + g.direction.name().toLowerCase() + " rate";
+        FType t = checkExpr(g.rate, ctx);
+        if (t != null && (!(t instanceof TRate)
+                || ((TRate) t).numer != UnitFamily.MASS
+                || ((TRate) t).denom != UnitFamily.TIME))
+            err(ctx + ": must be Rate(MASS, TIME), got " + t);
         // §4.4.9 consistency: bulk+lose and cut+gain are rejected; maintain accepts either.
         if (goalMode == Ast.GoalMode.BULK && g.direction == Ast.Direction.LOSE)
             err("goal direction 'lose' is inconsistent with athlete goal 'bulk' (§4.4.9)");

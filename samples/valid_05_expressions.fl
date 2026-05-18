@@ -1,0 +1,26 @@
+# §4.7: let bindings are now usable inside workout, meal, target, and rate slots.
+athlete(bodyweight: 80 kg, goal: bulk) {
+
+    let benchBase   = 80 kg
+    let plateStep   = 2.5 kg
+    let progRate    = 2.5 kg/week
+    let weeklyGain  = 0.5 kg/week
+    let proteinPerMeal = 40 g
+
+    workout "Push Day" {
+        exercise "Bench Press"    { sets: 4, reps: 6, weight: benchBase + 2 * plateStep }
+        exercise "Overhead Press" { sets: 3, reps: 8, weight: benchBase - 30 kg }
+        progress weight progRate
+    }
+
+    meal "Breakfast" {
+        protein: proteinPerMeal
+        carbs:   2 * proteinPerMeal
+        fat:     proteinPerMeal / 2
+    }
+
+    target protein >= 1.8 g per kg of bodyweight
+    goal   gain weeklyGain
+
+    plan 3 week with workouts: ["Push Day"], meals: ["Breakfast"]
+}

@@ -1,6 +1,8 @@
 # Diet-only program — no workout section (a client tracking nutrition only)
 athlete(bodyweight: 65 kg, goal: maintain) {
 
+    let dailyProtein = 30 g + 50 g + 45 g
+
     meal "Breakfast" {
         protein: 30 g
         carbs:   60 g
@@ -18,8 +20,6 @@ athlete(bodyweight: 65 kg, goal: maintain) {
         carbs:   70 g
         fat:     18 g
     }
-
-    let dailyProtein = 30 g + 50 g + 45 g
 
     target protein >= 1.6 g per kg of bodyweight
     target fat <= 0.8 g per kg of bodyweight

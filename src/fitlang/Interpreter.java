@@ -102,6 +102,14 @@ public final class Interpreter {
         return new RateV(num / den, r.numerFamily, r.denomFamily);
     }
 
+    // ── Slot evaluators (§4.7) ───────────────────────────────────────────────
+    // Type checker has already proved the slot expression has the family/shape
+    // each call site expects; these helpers just downcast the evaluated Value.
+
+    private MassV evalMass(Ast.Expr e) { return (MassV) evalExpr(e); }
+
+    private RateV evalRateMassTime(Ast.Expr e) { return (RateV) evalExpr(e); }
+
     // ── Display helpers (role-keyed; deltas use measured-side role) ──────────
 
     private static String fmt(double d) {
@@ -142,16 +150,14 @@ public final class Interpreter {
         for (Ast.WorkoutDecl w : b.workouts) workouts.put(w.label, w);
         for (Ast.MealDecl    m : b.meals)    meals.put(m.label, m);
 
-        // §4.4.5: evaluate let-decls into the env; static when-dispatch (§4.4.10)
-        // splices the surviving branch into the rule stream.
+        // §4.7 prefix let-section is evaluated first so workout and meal
+        // bodies see the bindings (§4.6.5).
+        for (Ast.LetDecl ld : b.lets) env.put(ld.name, evalExpr(ld.expr));
+
+        // §4.4.10 static when-dispatch: splice the surviving branch into the
+        // rule stream. (No lets in rules anymore — see §4.7.)
         List<Ast.RuleDecl> liveRules = new ArrayList<>();
         spliceRules(b.rules, b.params.goal, liveRules);
-        for (Ast.RuleDecl r : liveRules) {
-            if (r instanceof Ast.LetDecl) {
-                Ast.LetDecl ld = (Ast.LetDecl) r;
-                env.put(ld.name, evalExpr(ld.expr));
-            }
-        }
 
         int N = b.schedule.weeks;
         Plan plan = new Plan();
@@ -160,11 +166,11 @@ public final class Interpreter {
         plan.horizon           = new TimeV(toCanonical(N, "week"));
         plan.goalRate          = findGoalRate(liveRules);
 
-        // §4.4.8: signed kg/s change per second of elapsed time. lose negates.
+        // §4.4.8: signed g/s change per second of elapsed time. lose negates.
         double bwChangePerSec = 0.0;
         if (plan.goalRate != null) {
             int sign = (plan.goalRate.direction == Ast.Direction.LOSE) ? -1 : +1;
-            bwChangePerSec = sign * plan.goalRate.rate.v; // g/s already canonical
+            bwChangePerSec = sign * plan.goalRate.rate.v; // canonical (g/s)
         }
         double weekInSec = toCanonical(1.0, "week");
 
@@ -219,7 +225,7 @@ public final class Interpreter {
                 Ast.GoalRateDecl g = (Ast.GoalRateDecl) r;
                 Plan.GoalRate out = new Plan.GoalRate();
                 out.direction = g.direction;
-                out.rate      = liftRate(g.rate);
+                out.rate      = evalRateMassTime(g.rate);
                 return out;
             }
         }
@@ -231,20 +237,23 @@ public final class Interpreter {
     private Plan.WorkoutResult evalWorkout(Ast.WorkoutDecl w, double offsetSec) {
         Plan.WorkoutResult out = new Plan.WorkoutResult();
         out.label = w.label;
-        double wkPerSec = (w.progress == null) ? 0.0 : liftRate(w.progress.rate).v;
+        double wkPerSec = (w.progress == null) ? 0.0 : evalRateMassTime(w.progress.rate).v;
         for (Ast.WorkoutItem it : w.items) {
             if (it instanceof Ast.ExerciseDecl) {
                 out.exercises.add(evalExercise((Ast.ExerciseDecl) it, wkPerSec, offsetSec));
             } else if (it instanceof Ast.RoutineCall) {
                 Ast.RoutineCall rc = (Ast.RoutineCall) it;
                 Ast.RoutineDecl rd = routines.get(rc.label);
-                double rkPerSec = (rd.progress == null) ? 0.0 : liftRate(rd.progress.rate).v;
                 // §4.4.7: bind params, evaluate routine body in extended env.
-                // (Args are <quantity> in P1; no real expressions yet.)
+                // Args are arbitrary expressions in P2 (§4.7) — eval first in
+                // the caller's env, then bind into the extended env.
+                List<Value> argVals = new ArrayList<>(rc.args.size());
+                for (Ast.Expr arg : rc.args) argVals.add(evalExpr(arg));
                 Map<String, Value> savedEnv = new LinkedHashMap<>(env);
                 for (int i = 0; i < rd.params.size(); i++) {
-                    env.put(rd.params.get(i).name, liftQuantity(rc.args.get(i)));
+                    env.put(rd.params.get(i).name, argVals.get(i));
                 }
+                double rkPerSec = (rd.progress == null) ? 0.0 : evalRateMassTime(rd.progress.rate).v;
                 for (Ast.ExerciseDecl e : rd.exercises) {
                     out.exercises.add(evalExercise(e, rkPerSec, offsetSec));
                 }
@@ -260,7 +269,7 @@ public final class Interpreter {
         r.label  = e.label;
         r.sets   = e.sets;
         r.reps   = e.reps;
-        double base_g = ((MassV) liftQuantity(e.weight)).g;
+        double base_g = evalMass(e.weight).g;
         r.weight = new MassV(base_g + progressGPerSec * offsetSec);
         return r;
     }
@@ -271,7 +280,7 @@ public final class Interpreter {
         Plan.MealResult out = new Plan.MealResult();
         out.label = m.label;
         for (Ast.MacroDecl md : m.macros) {
-            out.macros.put(md.name, (MassV) liftQuantity(md.quantity));
+            out.macros.put(md.name, evalMass(md.value));
         }
         return out;
     }
@@ -296,9 +305,9 @@ public final class Interpreter {
         Plan.TargetResult r = new Plan.TargetResult();
         r.macro = t.macro;
         r.relOp = t.relOp;
-        r.thresholdEcho = echoQuantity(t.qty);
 
-        double threshold_g = toCanonical(t.qty.value, t.qty.unit);
+        double threshold_g = evalMass(t.qty).g;
+        r.thresholdEcho = fmt(threshold_g) + " g";
         if (t.perUnit != null) {
             // "qty per perUnit of bodyweight" → multiply by bodyweight / 1-of-perUnit
             double perUnitCanonical = toCanonical(1.0, t.perUnit);
