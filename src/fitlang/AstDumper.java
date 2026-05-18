@@ -158,6 +158,7 @@ public final class AstDumper {
     private void dumpScheduleStmt(Ast.ScheduleStmt s) {
         line("ScheduleStmt");
         push();
+        line("weeks    : " + s.weeks);
         if (s.workouts != null) line("workouts : " + fmtList(s.workouts));
         if (s.meals    != null) line("meals    : " + fmtList(s.meals));
         pop();

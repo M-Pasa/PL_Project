@@ -18,10 +18,12 @@ import java.util.*;
  * not per family — bodyweight prints in kg, macros in g, etc. (§4.4 print
  * policy decided 2026-05-18; see D4 entry).
  *
- * The current parser produces "plan week" with no integer (§4.4.2's N=1
- * degenerate case); the interpreter materialises a single-week Plan. The
- * per-week loop is a no-op fold at N=1 but the structure is in place for a
- * future "plan N week" production.
+ * Multi-week projection (§4.4.8): the schedule carries an N from
+ * `plan [N] week …` (default N=1). For each week k ∈ 1..N the interpreter
+ * projects bodyweight as bw₀ ± goalRate × ((k-1) week) and applies any
+ * workout's `progress weight r` per-exercise as w₀ + r × ((k-1) week). Meals
+ * are constant across weeks (§4.4.8) and targets recompute against each
+ * week's projected bodyweight.
  */
 public final class Interpreter {
 
@@ -151,37 +153,47 @@ public final class Interpreter {
             }
         }
 
+        int N = b.schedule.weeks;
         Plan plan = new Plan();
         plan.athleteBodyweight = (MassV) liftQuantity(b.params.bodyweight);
         plan.athleteGoal       = b.params.goal;
-        plan.horizon           = new TimeV(toCanonical(1.0, "week")); // N=1 degenerate case
+        plan.horizon           = new TimeV(toCanonical(N, "week"));
         plan.goalRate          = findGoalRate(liveRules);
 
-        // Single-week schedule (§4.4.8 with N=1).
-        Plan.Week week = new Plan.Week();
-        week.index      = 1;
-        week.bodyweight = plan.athleteBodyweight;
-
-        if (b.schedule.workouts != null) {
-            for (String wl : b.schedule.workouts) {
-                week.workouts.add(evalWorkout(workouts.get(wl)));
-            }
+        // §4.4.8: signed kg/s change per second of elapsed time. lose negates.
+        double bwChangePerSec = 0.0;
+        if (plan.goalRate != null) {
+            int sign = (plan.goalRate.direction == Ast.Direction.LOSE) ? -1 : +1;
+            bwChangePerSec = sign * plan.goalRate.rate.v; // g/s already canonical
         }
-        if (b.schedule.meals != null) {
-            for (String ml : b.schedule.meals) {
-                week.meals.add(evalMeal(meals.get(ml)));
-            }
-        }
-        week.macroTotals = sumMacros(week.meals);
+        double weekInSec = toCanonical(1.0, "week");
 
-        for (Ast.RuleDecl r : liveRules) {
-            if (r instanceof Ast.TargetDecl) {
-                week.targets.add(evalTarget(
-                    (Ast.TargetDecl) r, week.macroTotals, week.bodyweight));
-            }
-        }
+        for (int k = 1; k <= N; k++) {
+            double offsetSec = (k - 1) * weekInSec;
+            Plan.Week week = new Plan.Week();
+            week.index      = k;
+            week.bodyweight = new MassV(plan.athleteBodyweight.g + bwChangePerSec * offsetSec);
 
-        plan.weeks.add(week);
+            if (b.schedule.workouts != null) {
+                for (String wl : b.schedule.workouts) {
+                    week.workouts.add(evalWorkout(workouts.get(wl), offsetSec));
+                }
+            }
+            if (b.schedule.meals != null) {
+                for (String ml : b.schedule.meals) {
+                    week.meals.add(evalMeal(meals.get(ml)));
+                }
+            }
+            week.macroTotals = sumMacros(week.meals);
+
+            for (Ast.RuleDecl r : liveRules) {
+                if (r instanceof Ast.TargetDecl) {
+                    week.targets.add(evalTarget(
+                        (Ast.TargetDecl) r, week.macroTotals, week.bodyweight));
+                }
+            }
+            plan.weeks.add(week);
+        }
         return plan;
     }
 
@@ -216,15 +228,17 @@ public final class Interpreter {
 
     // ── Workouts ─────────────────────────────────────────────────────────────
 
-    private Plan.WorkoutResult evalWorkout(Ast.WorkoutDecl w) {
+    private Plan.WorkoutResult evalWorkout(Ast.WorkoutDecl w, double offsetSec) {
         Plan.WorkoutResult out = new Plan.WorkoutResult();
         out.label = w.label;
+        double wkPerSec = (w.progress == null) ? 0.0 : liftRate(w.progress.rate).v;
         for (Ast.WorkoutItem it : w.items) {
             if (it instanceof Ast.ExerciseDecl) {
-                out.exercises.add(evalExercise((Ast.ExerciseDecl) it, env));
+                out.exercises.add(evalExercise((Ast.ExerciseDecl) it, wkPerSec, offsetSec));
             } else if (it instanceof Ast.RoutineCall) {
                 Ast.RoutineCall rc = (Ast.RoutineCall) it;
                 Ast.RoutineDecl rd = routines.get(rc.label);
+                double rkPerSec = (rd.progress == null) ? 0.0 : liftRate(rd.progress.rate).v;
                 // §4.4.7: bind params, evaluate routine body in extended env.
                 // (Args are <quantity> in P1; no real expressions yet.)
                 Map<String, Value> savedEnv = new LinkedHashMap<>(env);
@@ -232,7 +246,7 @@ public final class Interpreter {
                     env.put(rd.params.get(i).name, liftQuantity(rc.args.get(i)));
                 }
                 for (Ast.ExerciseDecl e : rd.exercises) {
-                    out.exercises.add(evalExercise(e, env));
+                    out.exercises.add(evalExercise(e, rkPerSec, offsetSec));
                 }
                 env.clear(); env.putAll(savedEnv); // restore — no closure leak
             }
@@ -240,12 +254,14 @@ public final class Interpreter {
         return out;
     }
 
-    private Plan.ExerciseResult evalExercise(Ast.ExerciseDecl e, Map<String, Value> ignoredEnv) {
+    private Plan.ExerciseResult evalExercise(Ast.ExerciseDecl e,
+                                             double progressGPerSec, double offsetSec) {
         Plan.ExerciseResult r = new Plan.ExerciseResult();
         r.label  = e.label;
         r.sets   = e.sets;
         r.reps   = e.reps;
-        r.weight = (MassV) liftQuantity(e.weight);
+        double base_g = ((MassV) liftQuantity(e.weight)).g;
+        r.weight = new MassV(base_g + progressGPerSec * offsetSec);
         return r;
     }
 

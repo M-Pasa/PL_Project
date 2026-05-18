@@ -418,18 +418,22 @@ public final class Parser {
         return new Ast.LetDecl(name, parseExpression());
     }
 
-    // <schedule-stmt> → "plan" "week" "with" <schedule-clauses>
+    // <schedule-stmt> → "plan" [ NUM_LIT ] "week" "with" <schedule-clauses>
     private Ast.ScheduleStmt parseScheduleStmt() {
         expect(Token.Type.PLAN);
+        int weeks = 1;
+        if (check(Token.Type.NUM_LIT)) {
+            weeks = parsePositiveInt(advance());
+        }
         expect(Token.Type.WEEK);
         expect(Token.Type.WITH);
-        return parseScheduleClauses();
+        return parseScheduleClauses(weeks);
     }
 
     // <schedule-clauses>
     //   → "workouts" ":" <name-list> [ "," "meals" ":" <name-list> ]
     //   | "meals"    ":" <name-list>
-    private Ast.ScheduleStmt parseScheduleClauses() {
+    private Ast.ScheduleStmt parseScheduleClauses(int weeks) {
         List<String> workouts = null;
         List<String> meals    = null;
 
@@ -452,7 +456,7 @@ public final class Parser {
             throw new FitLangException(
                 "Expected 'workouts' or 'meals' clause in plan statement", t.line, t.col);
         }
-        return new Ast.ScheduleStmt(workouts, meals);
+        return new Ast.ScheduleStmt(weeks, workouts, meals);
     }
 
     // <name-list> → "[" STRING_LIT { "," STRING_LIT } "]"

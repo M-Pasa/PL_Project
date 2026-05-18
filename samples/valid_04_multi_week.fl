@@ -1,0 +1,20 @@
+# Multi-week projection — exercises progress, bodyweight projects, targets re-evaluate.
+athlete(bodyweight: 78 kg, goal: bulk) {
+
+    workout "Push Day" {
+        exercise "Bench Press"    { sets: 4, reps: 6, weight: 80 kg }
+        exercise "Overhead Press" { sets: 3, reps: 8, weight: 50 kg }
+        progress weight 2.5 kg/week
+    }
+
+    meal "Breakfast" {
+        protein: 40 g
+        carbs:   80 g
+        fat:     15 g
+    }
+
+    target protein >= 1.8 g per kg of bodyweight
+    goal   gain 0.5 kg/week
+
+    plan 4 week with workouts: ["Push Day"], meals: ["Breakfast"]
+}

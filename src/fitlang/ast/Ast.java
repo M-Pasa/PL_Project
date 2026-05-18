@@ -266,10 +266,12 @@ public final class Ast {
     // ── Schedule (§4.3 <schedule-stmt>) ──────────────────────────────────────
 
     public static final class ScheduleStmt {
+        public final int          weeks;    // §4.4.8 N; 1 if "plan week …" with no NUM_LIT
         public final List<String> workouts; // null if workouts clause absent
         public final List<String> meals;    // null if meals clause absent
 
-        public ScheduleStmt(List<String> workouts, List<String> meals) {
+        public ScheduleStmt(int weeks, List<String> workouts, List<String> meals) {
+            this.weeks    = weeks;
             this.workouts = workouts;
             this.meals    = meals;
         }
