@@ -1,0 +1,50 @@
+# Comprehensive sample — exercises every D1 feature in one program.
+# Covers: closed lexicon, athlete header, routine decl + call w/ substitution,
+# prefix lets, within-family unit coercion (kg + g), all four arithmetic ops,
+# unary minus, parens, identifier rates, Rate × Time → Quantity (§4.5.5),
+# progress, goal-rate, target with per-bodyweight scaling (both rel-ops),
+# when-decl with surviving and dead branches, plan N week multi-week unfolding,
+# schedule with both workouts and meals.
+
+athlete(bodyweight: 80 kg, goal: bulk) {
+
+    routine "Base Press"(top: kg, accessory: kg) {
+        exercise "Bench Press"    { sets: 4, reps: 6, weight: top }
+        exercise "Overhead Press" { sets: 3, reps: 8, weight: accessory }
+    }
+
+    let base           = 80 kg + 200 g            # within-MASS coercion (g → kg)
+    let plateStep      = 2.5 kg
+    let topWeight      = base + 2 * plateStep     # binary + and Number * Quantity
+    let accWeight      = -plateStep + 22.5 kg     # unary minus
+    let halfBench      = (topWeight / 2)          # parens + Quantity / Number
+    let progRate       = 2.5 kg/week              # rate literal
+    let horizon        = 4 week                   # Quantity(TIME)
+    let endBoost       = progRate * horizon       # Rate × Time → Mass (§4.5.5)
+    let proteinPerMeal = 40 g
+    let weeklyGain     = 0.5 kg/week
+
+    workout "Push Day" {
+        use "Base Press"(topWeight, accWeight)
+        exercise "Triceps Pushdown" { sets: 3, reps: 12, weight: halfBench + endBoost - 30 kg }
+        progress weight progRate
+    }
+
+    meal "Breakfast" {
+        protein: proteinPerMeal
+        carbs:   2 * proteinPerMeal
+        fat:     proteinPerMeal / 2
+    }
+
+    target protein >= 1.8 g per kg of bodyweight
+    target fat <= 1 g per kg of bodyweight
+    goal gain weeklyGain
+
+    when goal: bulk {
+        target protein >= 2 g per kg of bodyweight
+    } else {
+        target protein >= 1.6 g per kg of bodyweight
+    }
+
+    plan 3 week with workouts: ["Push Day"], meals: ["Breakfast"]
+}

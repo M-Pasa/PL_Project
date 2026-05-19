@@ -1,0 +1,18 @@
+# Type-error sample — no-shadowing rule (§4.6.3).
+# The second `let benchBase` is illegal because the name is already bound
+# at the same athlete scope. The checker is expected to emit a single
+# diagnostic naming the rule.
+
+athlete(bodyweight: 80 kg, goal: bulk) {
+
+    let benchBase = 80 kg
+    let plateStep = 2.5 kg
+    let benchBase = 82 kg          # SHADOW — should be rejected
+
+    workout "Push Day" {
+        exercise "Bench Press" { sets: 4, reps: 6, weight: benchBase }
+        progress weight 2.5 kg/week
+    }
+
+    plan week with workouts: ["Push Day"]
+}

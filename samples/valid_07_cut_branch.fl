@@ -1,0 +1,37 @@
+# Same shape as valid_06 but with goal: cut → flips the when-decl dispatch.
+# Confirms the `else` branch of `when goal: bulk` is selected when the athlete
+# header carries a goal mode other than bulk, and the goal-direction consistency
+# check (§4.4.10): cut + lose is consistent, cut + gain would be rejected.
+
+athlete(bodyweight: 90 kg, goal: cut) {
+
+    let base       = 200 g + 79.8 kg           # within-MASS coercion (= 80 kg)
+    let plateStep  = 2.5 kg
+    let topWeight  = base + 2 * plateStep
+    let accWeight  = -plateStep + 22.5 kg
+    let progRate   = 1.0 kg/week               # cut block — slower progression
+    let weeklyLose = 0.75 kg/week
+
+    workout "Push Day" {
+        exercise "Bench Press"    { sets: 4, reps: 6, weight: topWeight }
+        exercise "Overhead Press" { sets: 3, reps: 8, weight: accWeight }
+        progress weight progRate
+    }
+
+    meal "Breakfast" {
+        protein: 60 g
+        carbs:   40 g
+        fat:     15 g
+    }
+
+    target protein >= 2 g per kg of bodyweight
+    goal lose weeklyLose
+
+    when goal: bulk {
+        target protein >= 2.4 g per kg of bodyweight   # DEAD branch (goal=cut)
+    } else {
+        target protein >= 1.8 g per kg of bodyweight   # SURVIVING branch
+    }
+
+    plan 2 week with workouts: ["Push Day"], meals: ["Breakfast"]
+}
