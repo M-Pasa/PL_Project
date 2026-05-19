@@ -3,8 +3,8 @@
 athlete(bodyweight: 90 kg, goal: cut) {
 
     routine "Base Press"(load: kg, accessory_load: kg) {
-        exercise "Bench Press"    { sets: 4, reps: 6, weight: 80 kg }
-        exercise "Overhead Press" { sets: 3, reps: 8, weight: 50 kg }
+        exercise "Bench Press"    { sets: 4, reps: 6, weight: load }
+        exercise "Overhead Press" { sets: 3, reps: 8, weight: accessory_load }
     }
 
     workout "Pull Day" {

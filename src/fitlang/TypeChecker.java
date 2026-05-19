@@ -122,12 +122,14 @@ public final class TypeChecker {
     // ── Declarations ─────────────────────────────────────────────────────────
 
     private void checkRoutineDecl(Ast.RoutineDecl r) {
-        // Routine bodies are templates: their exercise weights and the progress
-        // rate are typed in the athlete env (no routine-parameter binding yet —
-        // that happens at the call site). Per-call argument family-match is
-        // enforced separately in checkRoutineCall.
+        // Bind each routine parameter as Quantity(family) in the env so the body
+        // can reference it. Call-site argument family-match is still enforced in
+        // checkRoutineCall — the param's type here is the *declared* family.
+        Map<String, FType> saved = new LinkedHashMap<>(env);
+        for (Ast.RoutineParam p : r.params) env.put(p.name, new TQuantity(p.family));
         for (Ast.ExerciseDecl e : r.exercises) checkExerciseDecl(e, "routine \"" + r.label + "\"");
         if (r.progress != null) checkProgressRate(r.progress.rate, "routine \"" + r.label + "\"");
+        env.clear(); env.putAll(saved);
     }
 
     private void checkWorkoutDecl(Ast.WorkoutDecl w) {
