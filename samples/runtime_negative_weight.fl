@@ -1,0 +1,16 @@
+# Runtime error sample (Plan A): a computed exercise weight evaluates to
+# a negative Mass. The §4.5 type system tracks family but not sign, so this
+# is well-typed; the interpreter rejects it at --run.
+
+athlete(bodyweight: 80 kg, goal: bulk) {
+
+    let benchBase = 80 kg
+    let bigCut    = 90 kg
+
+    workout "Push Day" {
+        exercise "Bench Press" { sets: 4, reps: 6, weight: benchBase - bigCut }
+        progress weight 2.5 kg/week
+    }
+
+    plan week with workouts: ["Push Day"]
+}

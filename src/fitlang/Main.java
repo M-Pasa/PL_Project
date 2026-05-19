@@ -55,36 +55,39 @@ public final class Main {
             return;
         }
 
+        Ast.AthleteBlock program;
         try {
-            List<Token>      tokens  = new Lexer(source).tokenize();
-            Ast.AthleteBlock program = new Parser(tokens).parse();
-
-            List<String> typeErrors = List.of();
-            if (!noCheck) {
-                typeErrors = new TypeChecker().check(program);
-            }
-
-            if (dumpAst) {
-                System.out.print(new AstDumper().dump(program));
-            }
-
-            if (!typeErrors.isEmpty()) {
-                System.err.println("Type errors in '" + filePath + "':");
-                for (String e : typeErrors) System.err.println("  - " + e);
-                System.exit(1);
-            }
-
-            if (run) {
-                Interpreter.Plan plan = new Interpreter().run(program);
-                System.out.print(plan);
-            } else if (!dumpAst) {
-                System.out.println("OK: '" + filePath
-                    + "' parsed" + (noCheck ? "" : " and type-checked") + " successfully.");
-            }
-
+            List<Token> tokens = new Lexer(source).tokenize();
+            program = new Parser(tokens).parse();
         } catch (FitLangException e) {
             System.err.println("Parse error: " + e.getMessage());
             System.exit(1);
+            return;
+        }
+
+        List<String> typeErrors = noCheck ? List.of() : new TypeChecker().check(program);
+
+        if (dumpAst) {
+            System.out.print(new AstDumper().dump(program));
+        }
+
+        if (!typeErrors.isEmpty()) {
+            System.err.println("Type errors in '" + filePath + "':");
+            for (String e : typeErrors) System.err.println("  - " + e);
+            System.exit(1);
+        }
+
+        if (run) {
+            try {
+                Interpreter.Plan plan = new Interpreter().run(program);
+                System.out.print(plan);
+            } catch (FitLangException e) {
+                System.err.println("Runtime error: " + e.getMessage());
+                System.exit(1);
+            }
+        } else if (!dumpAst) {
+            System.out.println("OK: '" + filePath
+                + "' parsed" + (noCheck ? "" : " and type-checked") + " successfully.");
         }
     }
 }

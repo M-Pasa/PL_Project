@@ -9,9 +9,17 @@ import java.util.*;
  *
  * Assumes a well-typed AST: type errors are the type checker's job. The
  * interpreter never re-validates families or operator algebra; it only
- * computes. The single runtime fault that can survive type-checking is
- * division by zero in a Number/Number expression — reported via
- * {@link FitLangException}.
+ * computes. Three runtime faults can survive type-checking, all reported
+ * via {@link FitLangException}:
+ *   1. Division by zero in a Number/Number expression (§4.7.3).
+ *   2. A computed Mass slot (exercise weight, macro value) evaluates to a
+ *      negative value at some week. The §4.5 type system tracks family but
+ *      not sign; a plan that subtracts more mass than it adds is well-typed
+ *      but not physically executable. Domain-specific runtime error.
+ *   3. Projected bodyweight reaches ≤ 0 at some week k under the §4.4.8
+ *      multi-week unfolder. A `goal lose r` plan with a long-enough horizon
+ *      drives bodyweight off the bottom of the scale; not physically
+ *      meaningful. Domain-specific runtime error.
  *
  * Values are canonicalized at construction (§4.4.3): Mass → grams, Energy →
  * kcal, Time → seconds. Display units are chosen per role at print time,
@@ -142,6 +150,17 @@ public final class Interpreter {
     private final Map<String, Ast.RoutineDecl> routines = new LinkedHashMap<>();
     private final Map<String, Ast.WorkoutDecl> workouts = new LinkedHashMap<>();
     private final Map<String, Ast.MealDecl>    meals    = new LinkedHashMap<>();
+    /** Set by the main week loop so slot errors can name the week they fired in. */
+    private int currentWeekIndex = 0;
+
+    private void requireNonNegativeMass(MassV m, String where) {
+        if (m.g < 0.0) {
+            throw new FitLangException(
+                where + " evaluated to " + massAsKg(m) + " at week "
+                + currentWeekIndex + " (must be ≥ 0)",
+                0, 0);
+        }
+    }
 
     // ── Entry ────────────────────────────────────────────────────────────────
 
@@ -179,6 +198,21 @@ public final class Interpreter {
             Plan.Week week = new Plan.Week();
             week.index      = k;
             week.bodyweight = new MassV(plan.athleteBodyweight.g + bwChangePerSec * offsetSec);
+            // §4.4.8 invariant: bodyweight must remain positive across the horizon.
+            // The type system tracks Mass family but not sign; a `lose` direction
+            // with a long-enough horizon drives bodyweight ≤ 0, which is not a
+            // physically meaningful plan state.
+            if (week.bodyweight.g <= 0.0) {
+                throw new FitLangException(
+                    "bodyweight projected to " + massAsKg(week.bodyweight)
+                    + " at week " + k + " (must be > 0); "
+                    + "goal " + plan.goalRate.direction.name().toLowerCase()
+                    + " at " + rateAsKgPerWeek(plan.goalRate.rate)
+                    + " over plan " + N + " week with starting bodyweight "
+                    + massAsKg(plan.athleteBodyweight),
+                    0, 0);
+            }
+            this.currentWeekIndex = k;
 
             if (b.schedule.workouts != null) {
                 for (String wl : b.schedule.workouts) {
@@ -271,6 +305,7 @@ public final class Interpreter {
         r.reps   = e.reps;
         double base_g = evalMass(e.weight).g;
         r.weight = new MassV(base_g + progressGPerSec * offsetSec);
+        requireNonNegativeMass(r.weight, "exercise \"" + e.label + "\" weight");
         return r;
     }
 
@@ -280,7 +315,10 @@ public final class Interpreter {
         Plan.MealResult out = new Plan.MealResult();
         out.label = m.label;
         for (Ast.MacroDecl md : m.macros) {
-            out.macros.put(md.name, evalMass(md.value));
+            MassV v = evalMass(md.value);
+            requireNonNegativeMass(v,
+                "meal \"" + m.label + "\" macro " + md.name.name().toLowerCase());
+            out.macros.put(md.name, v);
         }
         return out;
     }

@@ -1,0 +1,16 @@
+# Runtime error sample (Plan B): the multi-week unfolder projects bodyweight
+# below zero. starting bw = 30 kg, goal lose 2 kg/week, horizon 20 weeks →
+# bw at week 16 = 30 − 2 × 15 = 0 kg → rejected. The §4.5 type system has no
+# way to see this: the horizon, the rate, and the bodyweight are each
+# well-typed in isolation.
+
+athlete(bodyweight: 30 kg, goal: cut) {
+
+    workout "Push Day" {
+        exercise "Bench Press" { sets: 4, reps: 6, weight: 40 kg }
+    }
+
+    goal lose 2 kg/week
+
+    plan 20 week with workouts: ["Push Day"]
+}
