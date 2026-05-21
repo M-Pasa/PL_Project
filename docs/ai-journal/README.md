@@ -20,6 +20,14 @@ This folder holds my AI Usage Journal entries (deliverable D4).
 2. Fill it in immediately while the session is fresh — especially the **Accepted / Rejected / Errors caught / Reflection** fields.
 3. At submission time, concatenate entries into a single PDF named `<studentID>_D4_P1.pdf` (or `_P2`).
 
+## AI use, in plain terms (for anyone reading this repo publicly)
+
+- **Primary tool:** Claude Code (Opus 4.7), the CLI agent that runs locally in a terminal against this repo. That is also the tool I used for E3, and the dominant tool in the per-entry logs in `entries/`.
+- **Other tools:** Gemini 3.1 Pro and GPT-5.5 were used only for the multi-model E1 and E2 experiments (one prompt per model, side-by-side comparison). Their full sessions are under `experiments/E1/` and `experiments/E2/`.
+- **Why raw transcripts are not always linked.** Claude Code is a CLI agent and does not produce a shareable web URL for a session — the transcript lives on disk locally. For E3 (and for the per-entry Claude Code sessions in `entries/`) the evidence is the entry's own narrative plus the resulting commits in this repo. The web-tool experiments (E1/E2) do include share links inside the per-model files.
+- **No retouching.** Every entry in `entries/` and every experiment file under `experiments/` is committed as written at the time of the session. The journal is grown forward, not edited backward — if I caught something later, it shows up in a later entry, not as a quiet edit to an earlier one.
+- **Dating discipline.** Filenames carry the session date (`NN_YYYY-MM-DD_topic.md`) and the body repeats it. Nothing is backfilled.
+
 ## Folder layout
 ```
 ai-journal/
