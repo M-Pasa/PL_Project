@@ -55,7 +55,7 @@ render() {
         --pdf-engine=pdflatex \
         -V geometry:margin=1in \
         -H tools/build_submission/header.tex \
-        --toc=false
+        
     echo "  $OUT/$dst"
 }
 
