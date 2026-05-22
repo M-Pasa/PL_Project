@@ -3,6 +3,7 @@
 **Author:** Muhammed Paşa (220104004930)
 **Course:** CSE 341 — Concepts of Programming Languages, Spring 2026, Gebze Technical University
 **Deliverable:** D2 (Part 2)
+**Repository:** <https://github.com/M-Pasa/PL_Project>
 
 > **AI use:** the handout requires AI assistance and a documented journal (D4). My journal — including which tools were used, raw experiment transcripts, and how the entries were written — is at [`docs/ai-journal/`](docs/ai-journal/README.md).
 
