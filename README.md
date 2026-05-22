@@ -100,7 +100,7 @@ Type errors in 'foo.fl':
 Runtime error: bodyweight became negative at week 35 (78.0 kg - 2.5 kg/week)
 ```
 
-Runtime checks cover division by zero, non-negative exercise weights after progression (R1), and positive projected bodyweight across the planned horizon (R2). See D1 §4.4.12.
+Runtime checks cover division by zero, non-negative exercise weights after progression (R1), and positive projected bodyweight across the planned horizon (R2). See D1 §4.4.3.
 
 ---
 
@@ -115,7 +115,7 @@ src/
     Parser.java            recursive-descent LL(1) parser -> AST
     AstDumper.java         indented-text pretty-printer for --dump-ast
     TypeChecker.java       D1 §4.5 + §4.6 static checks (units, scope, shadowing)
-    Interpreter.java       big-step interpreter; produces Plan (§4.4.2)
+    Interpreter.java       big-step interpreter; produces Plan (§4.4.3)
     FitLangException.java  parse / type / runtime error with line/col
     ast/
       Ast.java             all AST node types as inner static classes
@@ -143,12 +143,12 @@ samples/
 
 ## Design notes
 
-- **Closed lexicon** (D1 §4.2.5): every alphabetic lexeme is either a reserved word, a mode literal, or a unit — the lexer checks them in that order before emitting IDENT. Keywords can never be re-used as identifiers.
-- **`week` is dual** (D1 §4.2.6): the scanner emits a single `WEEK` token; the parser accepts it as both a reserved word (in `plan week with`) and a time-family unit (in rates like `2.5 kg/week`).
-- **Quantities are parser-level pairs** (D1 §4.3.4): the lexer emits `NUM_LIT` and `UNIT` separately; `parseQuantity()` fuses them and attaches the dimensional family.
+- **Closed lexicon** (D1 §4.2.3): every alphabetic lexeme is either a reserved word, a mode literal, or a unit — the lexer checks them in that order before emitting IDENT. Keywords can never be re-used as identifiers.
+- **`week` is dual** (D1 §4.2.4 / §4.2.5): the scanner emits a single `WEEK` token; the parser accepts it as both a reserved word (in `plan week with`) and a time-family unit (in rates like `2.5 kg/week`).
+- **Quantities are parser-level pairs** (D1 §4.3.2): the lexer emits `NUM_LIT` and `UNIT` separately; `parseQuantity()` fuses them and attaches the dimensional family.
 - **One-token lookahead** everywhere: each production alternative is selected by a unique token in its FIRST set; no backtracking is needed.
 - **Control structure** (D1 §4.3.2 `<when-decl>`): `when goal: <mode> { ... } [ else { ... } ]` selects between two rule sub-blocks based on the static goal mode. Dispatch is decidable at parse time and the unused branch is dropped before type-checking.
 - **User-defined templates** (D1 §4.3.2 `<routine-decl>` / `<routine-call>`): `routine "Name"(p1: kg, p2: kg) { ... }` declares a parameterised exercise group at athlete scope; `use "Name"(82 kg, 22 kg)` instantiates it inside a `<workout-decl>` body. Routine declarations precede `<body-sections>` so calls always resolve to an earlier declaration.
 - **Unit-aware type system** (D1 §4.5): within-family unit coercion (kg ↔ g, kcal ↔ kJ, week ↔ s) canonicalises every quantity to its base unit; cross-family arithmetic (Mass + Energy, kg × kg) is a static type error.
-- **Multi-week unfolding** (D1 §4.4.8): `plan N week` materialises N `Week` values; per-week bodyweight is `bw₀ + goalRate × (k − 1) week`, per-exercise weight is `w₀ + progress × (k − 1) week`, per-target threshold uses the week-k bodyweight when the target is `per kg of bodyweight`.
-- **Domain-specific runtime checks** (D1 §4.4.12): the interpreter aborts on division by zero, on a negative exercise weight after progression (R1), and on a non-positive projected bodyweight at any week in the horizon (R2). Each fault names the offending week and value.
+- **Multi-week unfolding** (D1 §4.4.3): `plan N week` materialises N `Week` values; per-week bodyweight is `bw₀ + goalRate × (k − 1) week`, per-exercise weight is `w₀ + progress × (k − 1) week`, per-target threshold uses the week-k bodyweight when the target is `per kg of bodyweight`.
+- **Domain-specific runtime checks** (D1 §4.4.3): the interpreter aborts on division by zero, on a negative exercise weight after progression (R1), and on a non-positive projected bodyweight at any week in the horizon (R2). Each fault names the offending week and value.
